@@ -1,0 +1,64 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	_ "modernc.org/sqlite"
+)
+
+func Open(path string) (*sql.DB, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("create db dir: %w", err)
+	}
+	conn, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+	if err := migrate(conn); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	return conn, nil
+}
+
+func migrate(db *sql.DB) error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS players (
+			id            TEXT PRIMARY KEY,
+			name          TEXT NOT NULL,
+			club_name     TEXT NOT NULL DEFAULT '',
+			avatar_url    TEXT NOT NULL DEFAULT '',
+			club_logo_url TEXT NOT NULL DEFAULT '',
+			rgx           INTEGER NOT NULL DEFAULT 0,
+			games_played  INTEGER NOT NULL DEFAULT 0,
+			is_new        BOOLEAN NOT NULL DEFAULT 0,
+			name_collision BOOLEAN NOT NULL DEFAULT 0,
+			scraped_at    DATETIME NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_players_name ON players(name);
+
+		CREATE TABLE IF NOT EXISTS scrape_permission (
+			id         INTEGER PRIMARY KEY CHECK (id = 1),
+			allowed    BOOLEAN NOT NULL,
+			checked_at DATETIME NOT NULL
+		);
+
+		CREATE TABLE IF NOT EXISTS rgx_jobs (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			player_id   TEXT NOT NULL,
+			date        TEXT NOT NULL,
+			status      TEXT NOT NULL,
+			result_json TEXT,
+			error       TEXT,
+			queued_at   DATETIME NOT NULL,
+			started_at  DATETIME,
+			finished_at DATETIME
+		);
+		CREATE INDEX IF NOT EXISTS idx_rgx_jobs_player_date ON rgx_jobs(player_id, date);
+		CREATE INDEX IF NOT EXISTS idx_rgx_jobs_status_queued ON rgx_jobs(status, queued_at);
+	`)
+	return err
+}

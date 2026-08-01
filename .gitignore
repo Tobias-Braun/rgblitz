@@ -1,0 +1,7 @@
+backend/cache/
+backend/data/
+.env
+frontend/.nuxt
+frontend/.output
+frontend/node_modules
+scraper/fixtures

@@ -1,0 +1,90 @@
+/* Design tokens from the "rgx-calc Screens" design (RG Blitz). */
+
+:root {
+  --bg: #0b0c0f;
+  --surface: #12141a;
+  --surface-2: #101114;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text: #f4f4f2;
+  --text-muted: rgba(244, 244, 242, 0.73);
+  --text-dim: rgba(244, 244, 242, 0.55);
+
+  --green: #3fe0ae;
+  --green-deep: #149c78;
+  --red: #ff8a6a;
+  --red-deep: #c2452a;
+  --yellow: #ffc75c;
+  --grey: #a7adb6;
+
+  --amber-1: #ffc233;
+  --amber-2: #e89500;
+  --amber-text: #f0a500;
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-body: 'Instrument Sans', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius-lg: 20px;
+  --radius-md: 16px;
+  --radius-sm: 12px;
+
+
+  --page-container-max-width: 960px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+#__nuxt {
+  min-height: 100vh;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -1,0 +1,45 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Berlin
+    volumes:
+      - backend_data:/app/data
+      - backend_cache:/app/cache/images
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE}
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "3000:3000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  backend_data:
+  backend_cache:
+  caddy_data:
+  caddy_config:
