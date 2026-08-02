@@ -1,4 +1,4 @@
-module github.com/tobiasmarkusbraun/rgx-calc
+module github.com/tobiasmarkusbraun/rgblitz
 
 go 1.25.0
 

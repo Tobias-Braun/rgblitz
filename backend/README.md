@@ -1,4 +1,4 @@
-# rgx-calc — Go Backend
+# rgblitz — Go Backend
 
 ## Prerequisites
 
@@ -196,14 +196,14 @@ This fetches the live `robots.txt`, evaluates it for `RGBlitzBot`, and updates t
 
 ```sh
 cd backend
-go build -o ../bin/rgx-calc-server ./cmd/server
-TZ=Europe/Berlin ../bin/rgx-calc-server
+go build -o ../bin/rgblitz-server ./cmd/server
+TZ=Europe/Berlin ../bin/rgblitz-server
 ```
 
 Cross-compile for Linux (e.g. for deployment):
 
 ```sh
-GOOS=linux GOARCH=amd64 go build -o ../bin/rgx-calc-server-linux ./cmd/server
+GOOS=linux GOARCH=amd64 go build -o ../bin/rgblitz-server-linux ./cmd/server
 ```
 
 ---

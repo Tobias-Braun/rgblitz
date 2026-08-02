@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
 )
 
 func TestPermissionStore_GetSet(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 const realRobotsTxt = `User-agent: *

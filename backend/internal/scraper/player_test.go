@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 const (

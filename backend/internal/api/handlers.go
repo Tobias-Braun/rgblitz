@@ -16,11 +16,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cache"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/config"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/jobqueue"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/config"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/jobqueue"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 // resultFreshWindow is how long a successfully finished job's result is

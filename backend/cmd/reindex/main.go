@@ -11,10 +11,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/config"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cron"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/config"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cron"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 func main() {

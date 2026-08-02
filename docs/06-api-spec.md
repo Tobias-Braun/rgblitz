@@ -1,4 +1,4 @@
-# rgx-calc — REST API Specification
+# RGBlitz — REST API Specification
 
 ## General
 

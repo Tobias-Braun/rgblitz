@@ -5,13 +5,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/api"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cache"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/config"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cron"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/jobqueue"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/api"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/config"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cron"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/jobqueue"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 func main() {
@@ -69,7 +69,7 @@ func main() {
 	router := api.NewRouter(handler)
 
 	addr := ":" + cfg.Port
-	log.Printf("rgx-calc server starting on %s (dev_mode=%v)", addr, cfg.DevMode)
+	log.Printf("rgblitz server starting on %s (dev_mode=%v)", addr, cfg.DevMode)
 	if err := http.ListenAndServe(addr, router); err != nil {
 		log.Fatalf("server: %v", err)
 	}

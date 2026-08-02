@@ -1,4 +1,4 @@
-# rgx-calc — System Architecture
+# RGBlitz — System Architecture
 
 ## High-Level Diagram
 

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cache"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
 )
 
 // PlayerInfo, GameResult and TodayResult mirror the JSON shape returned by the

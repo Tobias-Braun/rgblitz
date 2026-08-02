@@ -1,4 +1,4 @@
-# rgx-calc — Data Requirements
+# RGBlitz — Data Requirements
 
 ## Source
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cron"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cron"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
 )
 
 // spyFetcher records every path fetched and serves canned bodies.

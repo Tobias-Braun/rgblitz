@@ -1,4 +1,4 @@
-# rgx-calc — UI Requirements
+# RGBlitz — UI Requirements
 
 ## Layout Principles
 

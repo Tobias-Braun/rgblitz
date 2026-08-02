@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 func TestMatchP(t *testing.T) {

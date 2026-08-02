@@ -11,7 +11,7 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
 )
 
 // Ranking page paths for the two tabs that make up a complete player index.

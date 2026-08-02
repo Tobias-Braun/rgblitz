@@ -1,8 +1,8 @@
-# rgx-calc — Project Overview
+# RGBlitz — Project Overview
 
 ## What this is
 
-rgx-calc (product name **RGBlitz**) is a single-page web app for **Roundnet Germany** players. Roundnet (branded internationally as Spikeball) is played in weekend tournaments run by roundnetgermany.de. Players are rated with an ELO-like score called **RGX**. This app lets a player search for themselves and see how their RGX changed over the course of today's tournament, updated after each of their games, without needing an account.
+**RGBlitz** is a single-page web app for **Roundnet Germany** players. Roundnet (branded internationally as Spikeball) is played in weekend tournaments run by roundnetgermany.de. Players are rated with an ELO-like score called **RGX**. This app lets a player search for themselves and see how their RGX changed over the course of today's tournament, updated after each of their games, without needing an account.
 
 Roundnet Germany runs its own player portal at **playerzone.roundnetgermany.de**, but that site never shows a live, per-game RGX delta — only the final rating some time after the fact. **RGBlitz** fills that gap by scraping the same public pages a spectator would see, computing the delta itself, and presenting it in a purpose-built UI.
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 const profileFixture = "../../../scraper/fixtures/player-profile.html"

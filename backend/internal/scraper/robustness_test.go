@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 // These tests assert every parser fails loudly (returns a clear error, never panics)

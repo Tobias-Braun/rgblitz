@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/api"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cache"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/config"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/jobqueue"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/api"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/config"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/jobqueue"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 const (

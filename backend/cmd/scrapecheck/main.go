@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/cache"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/db"
-	"github.com/tobiasmarkusbraun/rgx-calc/internal/scraper"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 func main() {

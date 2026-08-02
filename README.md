@@ -4,7 +4,7 @@
 
 **See your Roundnet RGX rating change live, as your tournament happens.**
 
-[![Docker images](https://img.shields.io/badge/ghcr.io-rgblitz-blue)](https://github.com/tobias-braun/rgx-calc/pkgs/container/rgblitz-backend)
+[![Docker images](https://img.shields.io/badge/ghcr.io-rgblitz-blue)](https://github.com/Tobias-Braun/rgblitz/pkgs/container/rgblitz-backend)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
 </div>

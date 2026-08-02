@@ -1,4 +1,4 @@
-# rgx-calc — Scraping Algorithm
+# RGBlitz — Scraping Algorithm
 
 ## Page Map
 
