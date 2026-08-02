@@ -65,6 +65,11 @@ const jobFinishedAtLabel = computed(() => {
     />
     <MoodText :total-delta="totalDeltaPerPlayer" />
 
+    <p class="alpha-hint">
+      Diese App befindet sich in der Alpha-Phase. Ergebnisse können fehlerhaft
+      sein oder es kann zu Störungen kommen.
+    </p>
+
     <SpieleListe :games="games" />
 
     <p v-if="result.has_proxy" class="proxy-note">
@@ -113,6 +118,13 @@ const jobFinishedAtLabel = computed(() => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.alpha-hint {
+  margin: -6px 20px 0;
+  font: 400 11px/1.5 var(--font-mono);
+  color: var(--text-dim);
+  text-align: center;
 }
 
 .proxy-note {

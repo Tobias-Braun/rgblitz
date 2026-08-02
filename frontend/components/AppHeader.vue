@@ -10,6 +10,7 @@
       <span class="rg">RG</span>
       <span class="blitz">BLITZ</span>
     </div>
+    <span class="alpha">ALPHA</span>
   </div>
 </template>
 
@@ -56,5 +57,16 @@
   font: 500 9px/1 var(--font-mono);
   letter-spacing: 0.28em;
   color: var(--amber-text);
+}
+
+.alpha {
+  margin-left: auto;
+  align-self: center;
+  font: 600 9px/1 var(--font-mono);
+  letter-spacing: 0.16em;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 6px;
 }
 </style>
