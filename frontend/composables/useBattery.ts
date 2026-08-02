@@ -29,8 +29,6 @@ export function useBattery() {
     () => isLowBattery.value || prefersReducedMotion.value
   );
 
-  const fakeIsBattery = ref(true);
-
   if (import.meta.client) {
     const nav = navigator as NavigatorWithBattery;
 
@@ -68,5 +66,5 @@ export function useBattery() {
     );
   }
 
-  return { isLowBattery: fakeIsBattery, prefersReducedMotion, isFastMode };
+  return { isLowBattery, prefersReducedMotion, isFastMode };
 }

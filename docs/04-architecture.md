@@ -19,24 +19,23 @@
 │  /api/players/search                    │
 │  /api/players/{id}/today (job create)   │
 │  /api/players/{id}/today/jobs/{jobId}   │
-│  /api/image (proxy)                     │
+│  /api/images/proxy (image cache)        │
 │                                         │
 │  ┌──────────────┐  ┌──────────────────┐ │
-│  │  Player DB   │  │  Result Cache    │ │
-│  │  (SQLite /   │  │  (in-memory or   │ │
-│  │   Postgres)  │  │   Redis)         │ │
+│  │  Player DB   │  │  In-memory TTL   │ │
+│  │  (SQLite)    │  │  result cache    │ │
 │  └──────────────┘  └──────────────────┘ │
 │                                         │
 │  ┌──────────────────────────────────┐   │
 │  │         Scraper Layer            │   │
-│  │  - PlayerScraper (weekly cron)   │   │
-│  │  - TournamentScraper (on-demand) │   │
-│  │  - ImageProxy cache              │   │
+│  │  - player index scrape (cron)    │   │
+│  │  - per-player scrape (job queue) │   │
+│  │  - image proxy + disk cache      │   │
 │  └────────────────┬─────────────────┘   │
 └───────────────────┼─────────────────────┘
-                    │  HTTP (scraping)
+                    │  HTTP (scraping, rate-limited)
                     ▼
-        playerzone.roundngetgermany.de
+        playerzone.roundnetgermany.de
 ```
 
 ---
@@ -54,8 +53,18 @@
 | `MoodText.vue` | Selects and displays threshold-based phrase from config |
 | `SpieleListe.vue` | Accordion wrapper + game rows |
 | `GameRow.vue` | Single match row (opponent, W/L/D badge, delta) |
-| `BatteryProvider.ts` | Composable: wraps `navigator.getBattery()`, exposes `isLowBattery` ref |
-| `mood-phrases.ts` | Static config file: threshold brackets → German phrase strings |
+| `PlayerChip.vue` | Persistent header chip for the selected player (avatar, name, close button) |
+| `NoTournamentCard.vue` | State 2 — player has no tournament today |
+| `NoGamesPlayedYet.vue` | State 2d — registered for today's tournament, schedule has no games yet |
+| `ResultLoading.vue` | State 2a — skeleton + queue-position phrase while a scrape job is in flight |
+| `ResultStale.vue` | State 2b — offers retry vs. accept-stale-result when a live fetch fails but cached data exists |
+| `ResultError.vue` | State 2c — hard failure with no cached fallback |
+| `useBattery.ts` (composable) | Wraps `navigator.getBattery()` and `prefers-reduced-motion`, exposes `isFastMode` |
+| `useTodayResult.ts` (composable) | Drives the job-create → poll-until-final-status flow behind `/api/players/:id/today` |
+| `mood-phrases.ts` | Static config file: RGX-delta brackets → German phrase strings |
+| `queue-phrases.ts` | Static config file: queue-position brackets → German phrase strings |
+
+See `docs/02-ui-requirements.md` for the full state list and behavior of each.
 
 **State management**: Simple `ref`/`reactive` composables — no Pinia/Vuex needed given the stateless nature.
 
@@ -87,12 +96,12 @@ internal/
 
 #### Key Go decisions
 
-- **HTTP router**: `net/http` stdlib + `gorilla/mux` or `chi` for route params
-- **HTML scraping**: `golang.org/x/net/html` or `github.com/PuerkitoBio/goquery`
-- **Database**: SQLite via `modernc.org/sqlite` (zero C deps, easy local dev) with option to swap to Postgres in production
-- **In-memory cache**: simple `sync.Map` with expiry timestamps, or `github.com/patrickmn/go-cache`
+- **HTTP router**: `github.com/go-chi/chi/v5`
+- **HTML scraping**: `github.com/PuerkitoBio/goquery` (jQuery-style selectors over `golang.org/x/net/html`)
+- **Database**: SQLite via `modernc.org/sqlite` — pure Go, no cgo, a single file on disk. No plan to swap to a client/server database; the whole dataset is small and single-writer
+- **In-memory cache**: `github.com/patrickmn/go-cache` for TTL'd tournament results
 - **Cron**: `github.com/robfig/cron/v3`
-- **Image proxy**: `net/http` reverse-proxy with local disk cache under `./cache/images/`
+- **Image proxy**: plain `net/http` client fetch (not a reverse proxy — the handler reads the upstream response fully, then writes it out) with a local disk cache under `./cache/images/`
 
 ---
 
@@ -131,7 +140,7 @@ internal/
 ## Data Flow: Weekly Player Index Scrape
 
 ```
-1. Cron fires Friday 22:00 CET
+1. Cron fires Saturday 03:00 CET (or once at startup if the players table has < 1000 rows)
 2. PlayerScraper fetches playerzone player list / ranking page(s)
 3. For each player: parse id, name, avatar_url, club_name, club_logo_url, current_rgx
 4. Upsert into SQLite players table
@@ -152,14 +161,9 @@ internal/
 
 ---
 
-## Resolved Decisions
+## Notable Implementation Details
 
-| # | Question | Decision |
-|---|----------|----------|
-| OQ1 | Does playerzone block scrapers? | No known blocking. Standard `net/http` with a reasonable User-Agent is fine. Add 1 req/s rate limit as courtesy. |
-| OQ2 | How to detect today's tournament? | Scrape the home page (`/`). Tournaments shown there are live/in-play. `/tournaments/upcoming` shows not-yet-started events only. |
-| OQ3 | Is the player ID stable? | Yes. Derived from avatar filename prefix (e.g. `PAULCHEN`, `LUC2110`) — stable across time. |
-| OQ4 | Search background shader? | Plain WebGL/canvas shader — vanilla JS only, no Three.js. Degrades to static gradient in low-battery mode. |
-| OQ5 | Cache backend? | Single in-process `go-cache` or `sync.Map` with TTL — no Redis needed for single-server deployment. |
-| OQ6 | RGX formula? | Fully documented. See `03-data-requirements.md §RGX Calculation Formula`. |
-| OQ7 | Game-info pages accessible? | No — `/tournaments/game-info/{id}` requires login. RGX is computed from team schedule page + division teams page. |
+- **Scraper courtesy**: no known blocking from playerzone, but every outbound request is still serialized through a single global rate limiter capped at **1 request per 2 seconds** (`internal/scraper/rate_limiter.go`), shared across the weekly index scrape and every per-player job.
+- **Tournament detection**: rather than scanning the site for active tournaments, the backend scrapes the *player's own profile page* (`/players/{numeric_id}`) and looks for an entry dated today — see `05-scraping-algorithm.md §Tournament Detection`. There is no separate "is there a tournament right now" check.
+- **Player ID stability**: derived from the avatar image filename prefix (e.g. `PAULCHEN`, `LUC2110`) — stable across time, used as the primary key everywhere in the backend.
+- **Game-info pages are out of scope**: `/tournaments/game-info/{game_id}` requires a playerzone login, so RGX deltas are computed from the team schedule page + division teams page instead of scraped directly.

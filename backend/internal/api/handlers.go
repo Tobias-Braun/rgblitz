@@ -428,9 +428,9 @@ func (h *Handler) buildDevSpecialResult(sp devSpecialPlayer, now time.Time) Toda
 	}
 
 	games := []GameResult{
-		{Round: "Gr. A #1", OpponentName: "Foo / Bar", Result: "W", RGXDelta: 14, RGXDeltaPerPlayer: 7, HasProxy: false},
-		{Round: "Gr. A #2", OpponentName: "Baz / Qux", Result: "L", RGXDelta: -9, RGXDeltaPerPlayer: -4.5, HasProxy: false},
-		{Round: "HF #1", OpponentName: "Quux / Corge", Result: "W", RGXDelta: 11, RGXDeltaPerPlayer: 5.5, HasProxy: false},
+		{Round: "Gr. A #1", OpponentName: "Team Nord", Result: "W", RGXDelta: 14, RGXDeltaPerPlayer: 7, HasProxy: false},
+		{Round: "Gr. A #2", OpponentName: "Team Süd", Result: "L", RGXDelta: -9, RGXDeltaPerPlayer: -4.5, HasProxy: false},
+		{Round: "HF #1", OpponentName: "Team West", Result: "W", RGXDelta: 11, RGXDeltaPerPlayer: 5.5, HasProxy: false},
 	}
 	totalDelta := 0
 	for _, g := range games {
@@ -589,7 +589,7 @@ func (h *Handler) ProxyImage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp, err := http.Get(originalURL) //nolint:noctx
+	resp, err := imageProxyClient.Get(originalURL)
 	if err != nil || resp.StatusCode != http.StatusOK {
 		if resp != nil {
 			resp.Body.Close()
@@ -626,13 +626,30 @@ func (h *Handler) imageCachePath(originalURL string) string {
 	return filepath.Join(h.cfg.ImageCacheDir, safe)
 }
 
+// imageProxyClient bounds every outbound image fetch so a slow or
+// non-responding upstream can't tie up a handler goroutine indefinitely.
+var imageProxyClient = &http.Client{Timeout: 10 * time.Second}
+
+// isAllowedImageOrigin restricts the proxy to the two known image hosts.
+// It requires an exact host match or a proper subdomain (".host" suffix) —
+// a plain strings.HasSuffix(host, "pstaassets.blob.core.windows.net") would
+// also match an attacker-registered Azure storage account such as
+// "evilpstaassets.blob.core.windows.net", since Azure blob container names
+// are self-service and HasSuffix doesn't require a label boundary.
 func isAllowedImageOrigin(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return false
 	}
-	return strings.HasSuffix(u.Host, "pstaassets.blob.core.windows.net") ||
-		strings.HasSuffix(u.Host, "playerzone.roundnetgermany.de")
+	if u.Scheme != "https" {
+		return false
+	}
+	for _, host := range []string{"pstaassets.blob.core.windows.net", "playerzone.roundnetgermany.de"} {
+		if u.Host == host || strings.HasSuffix(u.Host, "."+host) {
+			return true
+		}
+	}
+	return false
 }
 
 func serveFile(w http.ResponseWriter, path string) {

@@ -138,7 +138,7 @@ If the player isn't found, or matches more than one player, `scrapecheck` prints
 
 ## Manually re-run the player index scrape
 
-`cmd/reindex` runs the exact same job the Friday 22:00 CET cron trigger runs — `Scheduler.ScrapeNow()` — against the live `playerzone.roundnetgermany.de` ranking pages, and upserts the results into SQLite. Use it to check the ranking-page scraper still works after a change, or to manually refresh/repair the index without waiting for (or restarting) the weekly schedule.
+`cmd/reindex` runs the exact same job the Saturday 03:00 CET cron trigger runs — `Scheduler.ScrapeNow()` — against the live `playerzone.roundnetgermany.de` ranking pages, and upserts the results into SQLite. Use it to check the ranking-page scraper still works after a change, or to manually refresh/repair the index without waiting for (or restarting) the weekly schedule.
 
 Both ranking tabs are scraped and merged: `/ranking/rg-index/1` (Open) is the base list, and `/ranking/rg-index/2` (Women) overrides the RGX of any player who also appears there. Women play Open tournaments too, but their tracked Open RGX and Women RGX can diverge — the persisted index always stores the Women RGX for those players, so the DB stays a stable reference value. If the Women tab fails to fetch, the reindex still completes with Open-only data (logged as a warning, not fatal).
 
@@ -242,11 +242,12 @@ cmd/
   reindex/     — manually re-run the weekly player index scrape against the live site
   checkpermission/ — manually re-check robots.txt and update the stored RESPECT_PERMISSION result
 internal/
-  api/      — HTTP handlers (search, today, image proxy) + chi router
+  api/      — HTTP handlers (search, today job create/poll, image proxy) + chi router
+  jobqueue/ — single-worker queue draining RgxJob rows through the shared rate limiter
   cache/    — thin in-memory TTL cache wrapper (go-cache)
   config/   — env-based config struct
-  cron/     — weekly Friday 22:00 CET player-index scrape job
-  db/       — SQLite schema migration + player CRUD
+  cron/     — weekly Saturday 03:00 CET player-index scrape + daily RgxJob cleanup
+  db/       — SQLite schema migration + player/job/permission CRUD
   scraper/  — HTML parsers for each playerzone page type, the RGX formula, and the
               Fetcher abstraction (HTTPFetcher for the live site, FixtureFetcher for
               dev mode / tests / the scrapecheck CLI)
@@ -259,6 +260,7 @@ internal/
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/players/search?q=` | Autocomplete from local player index (≥2 chars) |
-| `GET` | `/api/players/{id}/today` | Today's tournament result for a player |
+| `GET` | `/api/players/{id}/today` | Gets or creates today's scrape job for a player; returns immediately |
+| `GET` | `/api/players/{id}/today/jobs/{jobId}` | Polls the status/result of a job created above |
 | `GET` | `/api/images/proxy?url=` | CDN image proxy (base64-encoded URL param) |
 | `GET` | `/health` | Liveness check — returns 200 |

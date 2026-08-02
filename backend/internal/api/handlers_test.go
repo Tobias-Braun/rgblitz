@@ -487,3 +487,22 @@ func TestProxyImage_DisallowedOrigin(t *testing.T) {
 		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestProxyImage_SuffixBypass guards against a HasSuffix-based origin check
+// that would let an attacker-registered host like
+// "evilpstaassets.blob.core.windows.net" pass because it ends with the
+// allowed host string. Azure blob storage account names are self-service, so
+// this must be rejected as a distinct host, not just any suffix match.
+func TestProxyImage_SuffixBypass(t *testing.T) {
+	h, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	router := api.NewRouter(h)
+
+	encoded := base64.URLEncoding.EncodeToString([]byte("https://evilpstaassets.blob.core.windows.net/x.jpg"))
+	req := httptest.NewRequest(http.MethodGet, "/api/images/proxy?url="+encoded, nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
+	}
+}

@@ -13,7 +13,7 @@
 
 ---
 
-## Master Data Scrape (weekly, Friday 22:00 CET)
+## Master Data Scrape (weekly, Saturday 03:00 CET)
 
 ### Target
 `https://playerzone.roundnetgermany.de/ranking/rg-index/`
@@ -264,16 +264,21 @@ Result:
 | `profile:{numeric_id}` | 60s | In-memory | Parsed tournament entries from a player's profile page |
 | `division_teams:{teams_path}` | 5 min | In-memory | Parsed team list for a division |
 | `tournament_result:{player_id}:{date}` | 60s (active) / 24h (finished) | In-memory | Computed game results + delta |
-| `image:{sha256(original_url)}` | 7 days | Disk (`./cache/images/`) | Proxied image bytes |
+| image cache file, named from a sanitized original URL | 7 days | Disk (`./cache/images/`) | Proxied image bytes |
 
 ---
 
 ## Scraping Robustness Rules
 
-1. **Never scrape playerzone faster than 1 request per 2 seconds** — enforce a global rate limiter (single token bucket or ticker, shared across all scrapers) so that no two outbound requests to playerzone are issued less than 2 seconds apart. Parallel goroutines must queue through this limiter, not bypass it.
-2. **Stale-on-error**: if a scrape fails mid-flow and a cached result exists (even expired), return the stale result with an `"stale": true` flag in the JSON response
-3. **Circuit breaker**: if playerzone returns 5 consecutive errors within 10 minutes, pause all scraping for 10 minutes
-4. **Fixture-based tests**: save raw HTML snapshots for each page type; all parsers must pass tests against these fixtures before any live scraping
+1. **Never scrape playerzone faster than 1 request per 2 seconds** — enforced by a single global rate limiter (`internal/scraper/rate_limiter.go`, ticker-based) shared across the weekly index scrape and every per-player job. Parallel goroutines queue through it, not bypass it. **Implemented.**
+2. **Fixture-based tests**: raw HTML snapshots for each page type live in `scraper/fixtures/`; parsers are tested against these offline (see `internal/scraper/*_test.go`). **Implemented.**
+3. **robots.txt gate**: when `RESPECT_PERMISSION=true`, every scrape run checks `robots.txt` first and persists the allow/deny result; a disallowed result blocks further playerzone requests for that run (`internal/scraper/robots.go`, `internal/db/permission.go`). **Implemented.**
+
+### Not currently implemented
+
+The `TodayResult` type has a `stale` field (`internal/scraper/orchestrate.go`) and the frontend has a full UI for it (`ResultStale.vue` — retry vs. accept-stale-result), but nothing in the production code path ever sets `stale: true`. Today, when a job's scrape fails, it's simply marked `"error"` with no fallback to a previous cached result — the frontend then shows `ResultError.vue` instead. The only place `Stale: true` is ever produced is the `DEV_MODE` fixture player (`dev-stale`), used to exercise the `ResultStale.vue` UI in isolation. If you want real stale-on-error behavior (serve the last successful result when a live scrape fails, per the original design intent below), it needs wiring up in `internal/jobqueue` — flagged here so it isn't mistaken for a bug in existing behavior.
+
+A circuit breaker (pausing all scraping after N consecutive playerzone errors) was discussed early on but was never built; the rate limiter above is the only backpressure mechanism today.
 
 ---
 

@@ -13,7 +13,7 @@
 ### State 1 — Search (initial / idle)
 
 **Layout**
-- Full-page dark background with a **shader / animated gradient effect** behind the search bar (CSS shader or canvas-based; must degrade gracefully in low-battery mode — see §Battery UX)
+- Full-page dark background with an animated radial-gradient effect behind the search bar (plain CSS, no canvas/WebGL; must degrade gracefully in low-battery mode — see §Battery UX)
 - Vertically centered search bar in the middle of the viewport
 
 **Search bar behaviour**
@@ -21,7 +21,7 @@
 - On **focus**:
   - Bar animates to the **top of the page**, full viewport width
   - Autocomplete dropdown appears below it
-  - Background shader dims / reduces motion
+  - Background gradient dims / reduces motion
 - Autocomplete items each show:
   - Player avatar (image scraped from playerzone, lazy-loaded, 32 px circle)
   - Player full name
@@ -38,13 +38,39 @@
 
 ### State 2 — No-Tournament Day
 
-Triggered when the selected player has no tournament data for today.
+Triggered when the selected player has no tournament registered for today (component: `NoTournamentCard.vue`).
 
 **Layout**
-- Search bar remains visible at top (collapsed, non-focused)
+- Player chip remains visible at top
 - Centered message card:
   > "Es sieht so aus, als würdest du heute kein Turnier spielen. Diese Seite funktioniert nur an Turnier-Tagen."
 - No data displayed below
+
+---
+
+### State 2a — Loading (job queued/running)
+
+Selecting a player kicks off a background scrape job on the backend (see `04-architecture.md`); the frontend shows a skeleton (component: `ResultLoading.vue`) while polling for the result.
+
+- Skeleton circle + line, shimmer animation (disabled under `prefers-reduced-motion`)
+- Below the skeleton, a German status phrase keyed off the job's queue position (`config/queue-phrases.ts`), e.g. "Fast geschafft, du bist gleich dran..." — brackets range from "being fetched right now" up to "quite a lot going on, please be patient"
+
+### State 2b — Stale result available, live fetch failed
+
+If a fetch attempt fails but a previously cached result exists, the user is offered a choice rather than being shown an error outright (component: `ResultStale.vue`):
+- "Die Daten konnten gerade nicht live geladen werden. Du siehst einen zwischengespeicherten Stand vom letzten erfolgreichen Abruf."
+- Two actions: **Erneut versuchen** (retry the live fetch) or **Trotzdem anzeigen** (accept the stale snapshot and proceed to the normal result view)
+
+> **Current gap**: the backend doesn't yet produce `stale: true` outside of `DEV_MODE` fixtures — a real scrape failure today goes to State 2c (`ResultError.vue`) instead. See `05-scraping-algorithm.md §Not currently implemented`.
+
+### State 2c — Hard error, no cached data
+
+When a fetch fails and there's nothing to fall back on (component: `ResultError.vue`): retry button plus an option to search for a different player.
+
+### State 2d — Registered for today, but no games yet
+
+The player is confirmed to be in a tournament today, but the scraped schedule has no games in it yet — common right after the tournament starts (component: `NoGamesPlayedYet.vue`). Distinct from State 2 (no tournament at all): the player chip and a manual refresh button stay visible, since games can appear at any moment.
+- "Noch keine Spiele heute" — "Du bist für ein Turnier eingetragen, aber es wurden noch keine Ergebnisse erfasst. Schau später noch mal rein."
 
 ---
 
@@ -96,12 +122,12 @@ These are starter values; the exact phrases and bracket edges are configured in 
 
 ## Battery UX
 
-Detected via the **Web Battery Status API** (`navigator.getBattery()`).  
-Threshold for switching to fast mode: battery level **≤ 20 %** OR `charging === false && level ≤ 0.3` (exact threshold TBD).
+Detected via the **Web Battery Status API** (`navigator.getBattery()`), implemented in `composables/useBattery.ts`.
+Fast mode triggers when battery level **≤ 20 %**, OR the device is discharging (`charging === false`) with level **≤ 30 %**. It's also forced on whenever the OS-level `prefers-reduced-motion: reduce` media query matches, independent of battery state.
 
 | Feature | Beautiful mode (high battery) | Fast mode (low battery) |
 |---------|-------------------------------|------------------------|
-| Background shader / animated gradient | Enabled, full frame rate | Disabled — static solid color |
+| Background gradient animation | Enabled, full frame rate | Disabled — static solid color |
 | Circle glow animation (pulse) | Enabled | Disabled — static border only |
 | Number count-up animation on load | Enabled | Disabled — number shown immediately |
 | Accordion open/close animation | CSS transition (150 ms ease) | Instant toggle, no transition |

@@ -2,16 +2,14 @@
 
 ## Source
 
-All data originates from **playerzone.roundnetgermany.de** (note correct spelling) via HTML scraping.  
+All data originates from **playerzone.roundnetgermany.de** via HTML scraping.
 No official API exists. The Go backend is the sole consumer of playerzone; the Vue frontend never contacts playerzone directly.
 
 Images (player avatars, club logos) are hosted on Azure Blob Storage at `pstaassets.blob.core.windows.net` and must be proxied (see §Image Proxy).
 
-> **Important**: Before implementing scrapers, inspect the current DOM structure of playerzone to confirm element selectors. The site structure may change without notice — scraper tests should assert on known stable identifiers.
+> **Note for contributors**: playerzone's HTML structure isn't versioned or documented anywhere — it can change without notice. The scrapers (`internal/scraper/`) assert on known stable identifiers and are tested against saved HTML fixtures in `scraper/fixtures/`. If a live scrape starts failing, check those fixtures against the current page source before assuming the parsing logic is at fault.
 
 ---
-
-## Data Entities
 
 ## RGX Calculation Formula
 
@@ -127,7 +125,8 @@ In the real playerzone system, new players go through a pre-calculation round th
 
 ### Weekly Player Index (master data)
 
-- **Schedule**: Every **Friday at 22:00 CET** (cron job in Go backend)
+- **Schedule**: Every **Saturday at 03:00 CET** (cron job in Go backend, `internal/cron/jobs.go`) — comfortably before any Saturday tournament's first match, so RGX values are a valid pre-tournament baseline for the whole weekend
+- **Startup fallback**: Also runs once at process startup if the `players` table has fewer than 1000 rows, so a fresh deployment doesn't wait up to a week for a usable autocomplete (`cmd/server/main.go`)
 - **What**: Scrape full player list from playerzone — all active players with name, ID, avatar URL, club name, club logo URL
 - **Storage**: Local database table `players` (upsert by player ID)
 - **Purpose**: Powers the autocomplete; no live playerzone request per search keystroke
@@ -163,7 +162,8 @@ Full endpoint spec: see `06-api-spec.md`.
 
 - Caches proxied images on disk with a TTL of 7 days
 - Returns `Content-Type` matching the original image
-- Strips cookies and auth headers before forwarding
+- Issues a fresh, independent request to the CDN — no cookies or headers from the incoming client request are ever forwarded upstream
+- Only `https://` URLs on the two allow-listed hosts (`pstaassets.blob.core.windows.net`, `playerzone.roundnetgermany.de`) are proxied; anything else is rejected with `400`
 
 ---
 
@@ -174,16 +174,18 @@ Full REST API specification is in `06-api-spec.md`. Summary of endpoints:
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/players/search?q=` | Autocomplete from local player index |
-| `GET` | `/api/players/:id/today` | Today's tournament result for a player |
+| `GET` | `/api/players/:id/today` | Gets or creates today's scrape job for a player; returns immediately, never blocks on a live scrape |
+| `GET` | `/api/players/:id/today/jobs/:jobId` | Polls the status/result of a job created above |
 | `GET` | `/api/images/proxy?url=` | CDN image proxy with disk cache |
 
 Response time target for `/api/players/search`: < 100 ms (DB-only, no remote call).
+
+The live scrape itself runs on a single background worker (`internal/jobqueue`) rather than inline in the request handler — this is what lets multiple concurrent users each get an instant response while still serializing every outbound playerzone request through one rate limiter. See `04-architecture.md §Data Flow` for the full request lifecycle.
 
 ---
 
 ## Scraper Robustness
 
-- All scrapers must handle HTTP errors from playerzone gracefully (return stale cache if available, surface error to client otherwise)
-- Log all scrape attempts with timestamp, target URL, HTTP status, and parse success/failure
-- Scrapers are tested with saved HTML fixtures so they can be run offline
+- Scrapers are tested with saved HTML fixtures (`scraper/fixtures/`) so they can be run offline
 - If playerzone changes its HTML structure, the scraper should fail loudly (assert on known element presence) rather than silently returning empty data
+- A failed scrape currently surfaces to the client as `status: "error"`, not a stale-cache fallback — see `05-scraping-algorithm.md §Not currently implemented` for the gap between this and the frontend's `ResultStale.vue` UI
