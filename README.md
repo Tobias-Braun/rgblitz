@@ -1,6 +1,6 @@
 <div align="center">
 
-# RGBlitz
+<h1><img src="frontend/public/favicon.svg" width="32" height="32" valign="middle" alt="" /> RGBlitz</h1>
 
 **See your Roundnet RGX rating change live, as your tournament happens.**
 
