@@ -1,24 +1,24 @@
 <!-- Collapsed player identity row shown above the result/no-tournament states (design 3c/3d/3e/3f). -->
 <script setup lang="ts">
-import { ref } from 'vue'
-import type { PlayerRef } from '~/types/api'
-import { initials, withApiBase } from '~/utils/format'
+import { ref } from "vue";
+import type { PlayerRef } from "~/types/api";
+import { initials, withApiBase } from "~/utils/format";
 
 const props = withDefaults(
   defineProps<{
-    player: PlayerRef
-    detailed?: boolean
+    player: PlayerRef;
+    detailed?: boolean;
   }>(),
-  { detailed: false },
-)
+  { detailed: false }
+);
 
 defineEmits<{
-  close: []
-}>()
+  close: [];
+}>();
 
-const config = useRuntimeConfig()
-const avatarFailed = ref(false)
-const clubLogoFailed = ref(false)
+const config = useRuntimeConfig();
+const avatarFailed = ref(false);
+const clubLogoFailed = ref(false);
 </script>
 
 <template>
@@ -32,8 +32,10 @@ const clubLogoFailed = ref(false)
         loading="lazy"
         alt=""
         @error="avatarFailed = true"
-      >
-      <span v-else class="avatar-fallback">{{ initials(props.player.name) }}</span>
+      />
+      <span v-else class="avatar-fallback">{{
+        initials(props.player.name)
+      }}</span>
     </div>
     <div class="identity">
       <div class="name">{{ player.name }}</div>
@@ -47,9 +49,14 @@ const clubLogoFailed = ref(false)
         loading="lazy"
         alt=""
         @error="clubLogoFailed = true"
-      >
+      />
     </div>
-    <button type="button" class="close" aria-label="Andere:n Spieler:in suchen" @click="$emit('close')">
+    <button
+      type="button"
+      class="close"
+      aria-label="Andere:n Spieler:in suchen"
+      @click="$emit('close')"
+    >
       ×
     </button>
   </div>
@@ -65,7 +72,7 @@ const clubLogoFailed = ref(false)
   align-items: center;
   gap: 11px;
   padding: 0 14px;
-  margin: 0 16px 14px;
+  margin: 12px 16px 14px;
 }
 
 .avatar {
