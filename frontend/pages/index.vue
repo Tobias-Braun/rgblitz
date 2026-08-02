@@ -61,7 +61,7 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
 
     <template v-else>
       <AppHeader />
-
+      <PlayerChip :player="selectedPlayer" detailed @close="searchAgain" />
       <div class="content">
         <ResultLoading
           v-if="pending && !data"
@@ -128,12 +128,16 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
   display: flex;
   flex-direction: column;
   margin: 0 auto;
+  overflow: hidden;
 }
 
 .content {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding-top: 24px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 </style>

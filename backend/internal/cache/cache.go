@@ -7,12 +7,14 @@ import (
 )
 
 const (
-	TTLTournamentActive   = 60 * time.Second
-	TTLTournamentFinished = 24 * time.Hour
-	TTLTournamentMiss     = 15 * time.Minute
-	TTLDivisionTeams      = 5 * time.Minute
-	TTLPlayerProfile      = 60 * time.Second
-	TTLImageDisk          = 7 * 24 * time.Hour
+	TTLTournamentActive            = 60 * time.Second
+	TTLTournamentFinished          = 24 * time.Hour
+	TTLTournamentMiss              = 15 * time.Minute
+	TTLDivisionTeams               = 15 * time.Minute
+	TTLDivisionTeamsSuccess        = 40 * time.Minute
+	TTLPlayerProfile               = 10 * time.Minute
+	TTLPlayerProfileWithTournament = 6 * time.Hour
+	TTLImageDisk                   = 7 * 24 * time.Hour
 )
 
 type Cache struct {
@@ -20,7 +22,7 @@ type Cache struct {
 }
 
 func New() *Cache {
-	return &Cache{c: gocache.New(gocache.NoExpiration, 10*time.Minute)}
+	return &Cache{c: gocache.New(gocache.NoExpiration, 5*time.Minute)}
 }
 
 func (c *Cache) Set(key string, value any, ttl time.Duration) {

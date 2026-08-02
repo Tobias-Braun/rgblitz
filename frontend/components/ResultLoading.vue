@@ -14,10 +14,8 @@ const message = computed(() =>
 
 <template>
   <div class="result-loading" aria-busy="true" aria-label="Lädt Ergebnis">
-    <div class="skeleton chip" />
     <div class="skeleton circle" />
     <div class="skeleton line short" />
-    <div class="skeleton block" />
     <p v-if="queuePosition && queuePosition > 0" class="message">
       Warteschlangen-Position: {{ queuePosition }}
     </p>

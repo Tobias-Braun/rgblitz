@@ -10,11 +10,7 @@
 
 <style scoped>
 .app-footer {
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
+  flex: none;
   display: flex;
   justify-content: center;
   gap: 18px;

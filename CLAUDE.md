@@ -30,8 +30,8 @@ Every scrape (cron-triggered, startup-triggered, or via `Scheduler.ScrapeNow()`)
 ## Key domain rules (non-obvious, will cause bugs if missed)
 
 - **Tournaments are Saturday/Sunday only.** Return `{status: "no_tournament"}` immediately on weekdays without touching playerzone.
-- **RGX inputs are pre-tournament and fixed for the whole day.** Do not update `r1`/`r2` between games — all games use the same baseline. Sum all per-game deltas; apply division caps once at the end.
-- **New players** (no RGX in DB) get their division's starting value as a proxy (1000/1200/1400/1600). Set `has_proxy: true` on affected game results.
+- **RGX inputs are pre-tournament and fixed for the whole day.** Do not update `r1`/`r2` between games — all games use the same baseline. `total_delta` is the plain sum of per-game deltas — **no division caps apply anymore** (removed; see `docs/03-data-requirements.md`).
+- **New players** (no RGX in DB) get their division's starting value as a proxy (Beginner/Basic 1000, Intermediate 1100, Advanced 1250, Contender 1400, Pro 1600, unknown 1200). Contender is distinct from Pro. Set `has_proxy: true` on affected game results.
 - **Rate limit**: max 1 outbound request to playerzone every 2 seconds. Use a single global token bucket/ticker shared across all goroutines.
 - **Game-info pages** (`/tournaments/game-info/{id}`) require login — they are out of scope. RGX is computed, not scraped.
 
@@ -44,8 +44,8 @@ x2 = -x1
 ```
 
 - `r1`, `r2` = sum of both players' RGX on each team (pre-tournament, fixed)
-- `b` = 1.0 for Best-of-3, 0.75 for single-set
-- `p` = 1.0 / 0.67 / 0.5 / 0.33 / 0.0 for 2:0 / 2:1 / 1:1 / 1:2 / 0:2
+- `b` = 1.0 for multi-set (Best-of-3 or Best-of-5), 0.75 for single-set
+- `p` (set score → p): 1:0/2:0/3:0 → 1.0, 3:1 → 0.75, 2:1 → 0.67, 3:2 → 0.6, 1:1/2:2 → 0.5, 2:3 → 0.4, 1:2 → 0.33, 1:3 → 0.25, 0:1/0:2/0:3 → 0.0
 - Scale constant `d = 550` (not the ELO standard 400)
 
 ## Playerzone page map

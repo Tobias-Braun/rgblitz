@@ -157,15 +157,13 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		games = append(games, gr)
 	}
 
-	cappedRGX := DivisionCap(schedule.DivisionName, ownRGX+totalDelta)
-	cappedDelta := cappedRGX - ownRGX
 	pInfo.RGX = ownRGX
 
 	return TodayResult{
 		Status:     "ok",
 		Player:     pInfo,
 		Date:       dateStr,
-		TotalDelta: cappedDelta,
+		TotalDelta: totalDelta,
 		HasProxy:   hasProxy,
 		Games:      games,
 	}, nil
@@ -189,7 +187,13 @@ func fetchProfileEntries(deps ScrapeDeps, numericID string) ([]ProfileTournament
 	if err != nil {
 		return nil, err
 	}
-	deps.Cache.Set(cacheKey, entries, cache.TTLPlayerProfile)
+	var profileTTL time.Duration
+	if len(entries) >= 1 {
+		profileTTL = cache.TTLPlayerProfileWithTournament
+	} else {
+		profileTTL = cache.TTLPlayerProfile
+	}
+	deps.Cache.Set(cacheKey, entries, profileTTL)
 	return entries, nil
 }
 
@@ -236,7 +240,13 @@ func fetchDivisionTeamsByPath(deps ScrapeDeps, teamsPath string) ([]TeamEntry, e
 	if err != nil {
 		return nil, err
 	}
-	deps.Cache.Set(cacheKey, teams, cache.TTLDivisionTeams)
+	var teamsTTL time.Duration
+	if len(teams) >= 1 {
+		teamsTTL = cache.TTLDivisionTeamsSuccess
+	} else {
+		teamsTTL = cache.TTLDivisionTeams
+	}
+	deps.Cache.Set(cacheKey, teams, teamsTTL)
 	return teams, nil
 }
 

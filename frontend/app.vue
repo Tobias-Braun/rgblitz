@@ -7,7 +7,8 @@
 
 <style scoped>
 .app-shell {
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: linear-gradient(

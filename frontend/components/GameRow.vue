@@ -8,40 +8,31 @@ const props = defineProps<{
   game: Game;
 }>();
 
-const rgxDeltaPerPlayer = computed(() =>
-  props.game.rgx_delta ? props.game.rgx_delta / 2 : 0
+const tone = computed(() =>
+  props.game.was_cancelled
+    ? "neutral"
+    : deltaTone(props.game.rgx_delta_per_player)
 );
-const tone = computed(() => deltaTone(rgxDeltaPerPlayer.value));
 </script>
 
 <template>
-  <div class="game-row">
+  <div class="game-row" :class="{ cancelled: game.was_cancelled }">
     <span class="badge" :class="game.result.toLowerCase()">{{
       game.result
     }}</span>
     <div class="details">
       <span class="opponent">{{ game.opponent_name }}</span>
-      <span v-if="game.format || game.sets?.length" class="meta">
-        <span v-if="game.format">{{ game.format }}</span>
-        <span v-if="game.sets?.length" class="chips">
-          <span
-            v-for="(set, index) in game.sets"
-            :key="index"
-            class="chip"
-            :class="
-              game.result === 'D'
-                ? 'draw'
-                : set === 'W'
-                ? 'positive'
-                : 'negative'
-            "
-            >{{ set }}</span
-          >
+      <span v-if="game.was_cancelled || game.sets.length" class="meta">
+        <span v-if="game.was_cancelled">Abgesagt</span>
+        <span v-if="game.sets.length" class="chips">
+          <span v-for="(set, index) in game.sets" :key="index" class="chip">
+            {{ set.our_score }}:{{ set.opponent_score }}
+          </span>
         </span>
       </span>
     </div>
     <span class="delta" :class="tone">
-      {{ formatDelta(rgxDeltaPerPlayer) }}
+      {{ game.was_cancelled ? "—" : formatDelta(game.rgx_delta_per_player) }}
       <sup
         v-if="game.has_proxy"
         class="proxy-marker"
@@ -87,6 +78,15 @@ const tone = computed(() => deltaTone(rgxDeltaPerPlayer.value));
   color: var(--yellow);
 }
 
+.badge.c {
+  background: color-mix(in srgb, var(--grey) 18%, transparent);
+  color: var(--grey);
+}
+
+.game-row.cancelled {
+  opacity: 0.6;
+}
+
 .details {
   flex: 1;
   min-width: 0;
@@ -117,27 +117,10 @@ const tone = computed(() => deltaTone(rgxDeltaPerPlayer.value));
 }
 
 .chip {
-  width: 15px;
-  height: 15px;
+  padding: 1px 4px;
   border-radius: 4px;
-  display: grid;
-  place-items: center;
-  font: 700 9px/1 var(--font-mono);
-}
-
-.chip.positive {
-  background: color-mix(in srgb, var(--green) 20%, transparent);
-  color: var(--green);
-}
-
-.chip.negative {
-  background: color-mix(in srgb, var(--red) 20%, transparent);
-  color: var(--red);
-}
-
-.chip.draw {
-  background: color-mix(in srgb, var(--yellow) 20%, transparent);
-  color: var(--yellow);
+  background: color-mix(in srgb, var(--grey) 12%, transparent);
+  font: 700 11px/1.4 var(--font-mono);
 }
 
 .delta {

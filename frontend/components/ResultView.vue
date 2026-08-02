@@ -41,12 +41,6 @@ const jobFinishedAtLabel = computed(() => {
 
 <template>
   <div class="result-view">
-    <PlayerChip
-      :player="result.player"
-      detailed
-      @close="emit('search-again')"
-    />
-
     <div class="status-row">
       <span class="fetched-at" :class="{ stale: result.stale }">
         {{ jobFinishedAtLabel }}

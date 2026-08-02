@@ -200,7 +200,8 @@ async function focusInput() {
 <style scoped>
 .search-view {
   position: relative;
-  min-height: 100dvh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;

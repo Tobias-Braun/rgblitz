@@ -12,6 +12,7 @@ func TestMatchP(t *testing.T) {
 		won, lost int
 		want      float64
 	}{
+		// single-set / best-of-3
 		{2, 0, 1.0},
 		{1, 0, 1.0},
 		{2, 1, 0.67},
@@ -19,6 +20,14 @@ func TestMatchP(t *testing.T) {
 		{1, 2, 0.33},
 		{0, 2, 0.0},
 		{0, 1, 0.0},
+		// best-of-5
+		{3, 0, 1.0},
+		{3, 1, 0.75},
+		{3, 2, 0.6},
+		{2, 2, 0.5},
+		{2, 3, 0.4},
+		{1, 3, 0.25},
+		{0, 3, 0.0},
 	}
 	for _, tc := range cases {
 		got := scraper.MatchP(tc.won, tc.lost)
@@ -133,35 +142,3 @@ func TestGameResultFromCard_RGXDeltaPerPlayer(t *testing.T) {
 	}
 }
 
-func TestDivisionCap(t *testing.T) {
-	cases := []struct {
-		name     string
-		division string
-		finalRGX int
-		want     int
-	}{
-		{"pro: no cap even far above", "Pro Division", 5000, 5000},
-		{"pro: no cap even far below", "Pro Division", 0, 0},
-		{"advanced: just under upper cap", "Advanced", 1614, 1614},
-		{"advanced: exactly at upper cap", "Advanced", 1615, 1615},
-		{"advanced: just over upper cap", "Advanced", 1616, 1615},
-		{"advanced: just above lower cap", "Advanced", 1186, 1186},
-		{"advanced: exactly at lower cap", "Advanced", 1185, 1185},
-		{"advanced: just under lower cap", "Advanced", 1184, 1185},
-		{"intermediate: just under upper cap", "Intermediate", 1414, 1414},
-		{"intermediate: exactly at upper cap", "Intermediate", 1415, 1415},
-		{"intermediate: just over upper cap", "Intermediate", 1416, 1415},
-		{"beginner: just under upper cap", "Beginner", 1214, 1214},
-		{"beginner: exactly at upper cap", "Beginner", 1215, 1215},
-		{"beginner: just over upper cap", "Beginner", 1216, 1215},
-		{"unknown division: no cap", "Some Unknown Division", 9999, 9999},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := scraper.DivisionCap(tc.division, tc.finalRGX)
-			if got != tc.want {
-				t.Errorf("DivisionCap(%q, %d) = %d, want %d", tc.division, tc.finalRGX, got, tc.want)
-			}
-		})
-	}
-}

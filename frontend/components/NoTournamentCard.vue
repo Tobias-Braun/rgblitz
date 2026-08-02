@@ -53,7 +53,8 @@ defineEmits<{
       </div>
       <p class="message">
         Es sieht so aus, als würdest du heute kein Turnier spielen. Diese Seite
-        funktioniert nur an Turnier-Tagen.
+        funktioniert nur an Turnier-Tagen. Turniere werden erst registriert,
+        wenn die Divisionen veröffentlicht worden sind.
       </p>
       <p class="hint">Turniere sind nur Sa &amp; So.</p>
     </div>

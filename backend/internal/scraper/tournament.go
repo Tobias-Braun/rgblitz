@@ -42,6 +42,10 @@ type GameCard struct {
 	SetScores    []SetScore
 	// "win", "loss", or "draw" as reported by playerzone.
 	Outcome string
+	// True if playerzone marked the game as cancelled (e.g. forfeit/injury).
+	// Cancelled games render with outcome="" just like not-yet-played games,
+	// so they're distinguished by the "cancelled" class on rg-game-card.
+	WasCancelled bool
 }
 
 // TeamScheduleResult holds the data from /tournaments/schedule/team/{id}.
@@ -58,14 +62,23 @@ type TeamPlayer struct {
 	RGX  int
 }
 
+// SetResult is one set's score, oriented so OurScore/OpponentScore are always
+// from our team's perspective regardless of which side playerzone listed first.
+type SetResult struct {
+	OurScore      int `json:"our_score"`
+	OpponentScore int `json:"opponent_score"`
+}
+
 // GameResult is the computed result for one game.
 type GameResult struct {
-	Round             string  `json:"round"`
-	OpponentName      string  `json:"opponent_name"`
-	Result            string  `json:"result"` // "W", "L", "D"
-	RGXDelta          int     `json:"rgx_delta"`
-	RGXDeltaPerPlayer float32 `json:"rgx_delta_per_player"`
-	HasProxy          bool    `json:"has_proxy"`
+	Round             string      `json:"round"`
+	OpponentName      string      `json:"opponent_name"`
+	Result            string      `json:"result"` // "W", "L", "D", or "C" for a cancelled game
+	RGXDelta          int         `json:"rgx_delta"`
+	RGXDeltaPerPlayer float32     `json:"rgx_delta_per_player"`
+	HasProxy          bool        `json:"has_proxy"`
+	WasCancelled      bool        `json:"was_cancelled"`
+	Sets              []SetResult `json:"sets"`
 }
 
 // reTournamentTeamID matches onclick="load_team_info(\d+, 60615)".
@@ -200,10 +213,29 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 
 		card := gameDiv.Find("rg-game-card")
 		outcome, _ := card.Attr("outcome")
+
+		// Cancelled games (forfeit/injury/etc.) also render with outcome="",
+		// but carry a "cancelled" class token on rg-game-card and a
+		// span.tag.game-cancelled marker in the tags slot — check both since
+		// either can appear depending on how the game was cancelled.
+		wasCancelled := false
+		if classAttr, ok := card.Attr("class"); ok {
+			for _, c := range strings.Fields(classAttr) {
+				if c == "cancelled" {
+					wasCancelled = true
+					break
+				}
+			}
+		}
+		if !wasCancelled && card.Find("div[slot='tags'] span.tag.game-cancelled").Length() > 0 {
+			wasCancelled = true
+		}
+
 		// Scheduled-but-not-yet-played games render with outcome="" and no set scores.
 		// Without this check they fall through to MatchP's 0:0 default (p=0.5), which
 		// misreports them as a draw instead of omitting them from the results.
-		if strings.TrimSpace(outcome) == "" {
+		// Cancelled games are kept even though outcome is also "" for them.
+		if strings.TrimSpace(outcome) == "" && !wasCancelled {
 			return
 		}
 
@@ -250,6 +282,7 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 			WeAreTeamOne: weAreTeamOne,
 			SetScores:    sets,
 			Outcome:      outcome,
+			WasCancelled: wasCancelled,
 		})
 	})
 
@@ -268,49 +301,23 @@ func cleanPlayerName(name string) string {
 // --- RGX formula ---
 
 // DivisionStartingRGX returns the proxy RGX for a new player in the given division.
+// Contender is a distinct division from Pro (unlike the old rules, where Contender
+// was treated as a synonym for Pro) — see playerzone.roundnetgermany.de/ranking/rg-index/faq.
 func DivisionStartingRGX(divisionName string) int {
 	lower := strings.ToLower(divisionName)
 	switch {
-	case strings.Contains(lower, "pro"), strings.Contains(lower, "contender"):
+	case strings.Contains(lower, "pro"):
 		return 1600
-	case strings.Contains(lower, "advanced"):
+	case strings.Contains(lower, "contender"):
 		return 1400
+	case strings.Contains(lower, "advanced"):
+		return 1250
 	case strings.Contains(lower, "intermediate"):
-		return 1200
+		return 1100
 	case strings.Contains(lower, "beginner"), strings.Contains(lower, "basic"):
 		return 1000
 	default:
-		return 1300
-	}
-}
-
-// DivisionCap applies upper/lower RGX caps for the given division after the day's total delta.
-// Returns the capped final RGX.
-func DivisionCap(divisionName string, finalRGX int) int {
-	lower := strings.ToLower(divisionName)
-	switch {
-	case strings.Contains(lower, "pro"), strings.Contains(lower, "contender"):
-		return finalRGX // no caps
-	case strings.Contains(lower, "advanced"):
-		if finalRGX > 1615 {
-			return 1615
-		}
-		if finalRGX < 1185 {
-			return 1185
-		}
-		return finalRGX
-	case strings.Contains(lower, "intermediate"):
-		if finalRGX > 1415 {
-			return 1415
-		}
-		return finalRGX
-	case strings.Contains(lower, "beginner"), strings.Contains(lower, "basic"):
-		if finalRGX > 1215 {
-			return 1215
-		}
-		return finalRGX
-	default:
-		return finalRGX
+		return 1200
 	}
 }
 
@@ -335,7 +342,7 @@ func ComputeDeltaBreakdown(r1, r2, setsWon, setsLost int) RGXBreakdown {
 	if totalSets <= 1 {
 		b = 0.75 // single-set format
 	} else {
-		b = 1.0 // Best-of-3
+		b = 1.0 // multi-set format (Best-of-3 or Best-of-5)
 	}
 
 	p := MatchP(setsWon, setsLost)
@@ -372,18 +379,28 @@ func countSets(game GameCard) (won, lost int) {
 	return
 }
 
-// MatchP maps a (won:lost) set record to the p value used in the RGX formula.
+// MatchP maps a (won:lost) set record to the p value used in the RGX formula, per the
+// current table at playerzone.roundnetgermany.de/ranking/rg-index/faq. Covers single-set,
+// best-of-3, and best-of-5 records.
 func MatchP(won, lost int) float64 {
 	switch fmt.Sprintf("%d:%d", won, lost) {
-	case "2:0", "1:0":
+	case "1:0", "2:0", "3:0":
 		return 1.0
+	case "3:1":
+		return 0.75
 	case "2:1":
 		return 0.67
-	case "1:1":
+	case "3:2":
+		return 0.6
+	case "1:1", "2:2":
 		return 0.5
+	case "2:3":
+		return 0.4
 	case "1:2":
 		return 0.33
-	case "0:2", "0:1":
+	case "1:3":
+		return 0.25
+	case "0:1", "0:2", "0:3":
 		return 0.0
 	default:
 		return 0.5
@@ -391,7 +408,23 @@ func MatchP(won, lost int) float64 {
 }
 
 // GameResultFromCard converts a parsed GameCard into a GameResult using the RGX formula.
+// A cancelled game never contributes to RGX (delta 0) since it wasn't actually
+// played to completion, but its (possibly partial) set scores are still reported.
 func GameResultFromCard(game GameCard, r1, r2 int, hasProxy bool) GameResult {
+	sets := orientSets(game)
+	if game.WasCancelled {
+		return GameResult{
+			Round:             game.Round,
+			OpponentName:      game.OpponentName,
+			Result:            "C",
+			HasProxy:          hasProxy,
+			WasCancelled:      true,
+			Sets:              sets,
+			RGXDelta:          0,
+			RGXDeltaPerPlayer: 0,
+		}
+	}
+
 	setsWon, setsLost := countSets(game)
 	delta := ComputeGameDelta(r1, r2, game)
 	result := setResultChar(setsWon, setsLost)
@@ -402,7 +435,22 @@ func GameResultFromCard(game GameCard, r1, r2 int, hasProxy bool) GameResult {
 		RGXDelta:          delta,
 		RGXDeltaPerPlayer: 0.5 * float32(delta),
 		HasProxy:          hasProxy,
+		Sets:              sets,
 	}
+}
+
+// orientSets converts a game's raw team-one/team-two set scores into
+// our-score/opponent-score pairs based on which side we played on.
+func orientSets(game GameCard) []SetResult {
+	sets := make([]SetResult, 0, len(game.SetScores))
+	for _, s := range game.SetScores {
+		if game.WeAreTeamOne {
+			sets = append(sets, SetResult{OurScore: s.TeamOneScore, OpponentScore: s.TeamTwoScore})
+		} else {
+			sets = append(sets, SetResult{OurScore: s.TeamTwoScore, OpponentScore: s.TeamOneScore})
+		}
+	}
+	return sets
 }
 
 func setResultChar(won, lost int) string {

@@ -155,6 +155,77 @@ func TestParseTeamSchedule_SkipsUnplayedGames(t *testing.T) {
 	}
 }
 
+func TestParseTeamSchedule_KeepsCancelledGames(t *testing.T) {
+	const html = `
+<div class="player-card">
+	<div class="info-player-name"><a class="info-text">Test Player</a></div>
+	<span class="rgx-value">1200</span>
+</div>
+<div id="game-1">
+	<rg-game-card outcome="" class="slideRight  cancelled ">
+		<div slot="tags">
+			<a class="tag" href="#">P5-8</a>
+			<span class="tag game-cancelled">Cancelled</span>
+		</div>
+		<div class="teams">
+			<div class="team winner"><a class="details" onclick="load_team_info(1, 100)"><span class="name">Us</span></a></div>
+			<div class="team loser"><a class="details" onclick="load_team_info(2, 200)"><span class="name">Them</span></a></div>
+		</div>
+		<div class="scores">
+			<div class="set"><span class="score">1</span><span class="score">0</span></div>
+		</div>
+	</rg-game-card>
+</div>
+<div id="game-2">
+	<rg-game-card outcome="win">
+		<div class="teams">
+			<div class="team"><a class="details" onclick="load_team_info(1, 100)"><span class="name">Us</span></a></div>
+			<div class="team"><a class="details" onclick="load_team_info(3, 300)"><span class="name">Played</span></a></div>
+		</div>
+		<div class="scores">
+			<div class="set"><span class="score">15</span><span class="score">10</span></div>
+		</div>
+	</rg-game-card>
+</div>
+`
+	result, err := scraper.ParseTeamSchedule(strings.NewReader(html), 100)
+	if err != nil {
+		t.Fatalf("ParseTeamSchedule: %v", err)
+	}
+	if len(result.Games) != 2 {
+		t.Fatalf("expected 2 games (cancelled game should be kept), got %d: %+v", len(result.Games), result.Games)
+	}
+
+	cancelled := result.Games[0]
+	if !cancelled.WasCancelled {
+		t.Error("expected first game to be marked WasCancelled")
+	}
+	if cancelled.OpponentName != "Them" {
+		t.Errorf("cancelled game opponent: got %q, want %q", cancelled.OpponentName, "Them")
+	}
+	if len(cancelled.SetScores) != 1 || cancelled.SetScores[0].TeamOneScore != 1 || cancelled.SetScores[0].TeamTwoScore != 0 {
+		t.Errorf("cancelled game set scores: got %+v", cancelled.SetScores)
+	}
+
+	if result.Games[1].WasCancelled {
+		t.Error("expected second (played) game to not be marked WasCancelled")
+	}
+
+	gr := scraper.GameResultFromCard(cancelled, 2400, 2400, false)
+	if !gr.WasCancelled {
+		t.Error("expected GameResult.WasCancelled to be true")
+	}
+	if gr.Result != "C" {
+		t.Errorf("cancelled game result: got %q, want %q", gr.Result, "C")
+	}
+	if gr.RGXDelta != 0 {
+		t.Errorf("cancelled game should not affect RGX, got delta %d", gr.RGXDelta)
+	}
+	if len(gr.Sets) != 1 || gr.Sets[0].OurScore != 1 || gr.Sets[0].OpponentScore != 0 {
+		t.Errorf("cancelled game oriented sets: got %+v", gr.Sets)
+	}
+}
+
 func TestComputeGameDelta(t *testing.T) {
 	// Test the RGX formula with known values.
 	// r1=2347 (our team), r2=2401 (opponents): equal-ish strength.
@@ -196,11 +267,11 @@ func TestDivisionStartingRGX(t *testing.T) {
 	}{
 		{"Beginner", 1000},
 		{"Basic Open", 1000},
-		{"Intermediate Women", 1200},
-		{"Advanced Mixed", 1400},
+		{"Intermediate Women", 1100},
+		{"Advanced Mixed", 1250},
+		{"Contender Open", 1400},
 		{"Pro Division", 1600},
-		{"Contender Open", 1600},
-		{"Unknown", 1300},
+		{"Unknown", 1200},
 	}
 	for _, tc := range cases {
 		got := scraper.DivisionStartingRGX(tc.division)

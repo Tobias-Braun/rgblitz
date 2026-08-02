@@ -17,7 +17,7 @@ Images (player avatars, club logos) are hosted on Azure Blob Storage at `pstaass
 
 RGX deltas are **not provided by playerzone** — they must be computed by the backend from game results and pre-game RGX values.
 
-Source: https://roundnetgermany.de/adjustment-rgx-division-limits-2023/
+Source: https://playerzone.roundnetgermany.de/ranking/rg-index/faq (supersedes the 2023 rules at https://roundnetgermany.de/adjustment-rgx-division-limits-2023/ — starting values changed and division caps were removed; see below)
 
 ### Formula
 
@@ -41,13 +41,19 @@ x2 = -x1   (zero-sum: team 2 loses exactly what team 1 gains)
 
 ### Match Result Values (p)
 
+Covers single-set, best-of-3, and best-of-5 formats:
+
 | Set score (team1 : team2) | p for team 1 |
 |---------------------------|-------------|
-| 2:0 or 1:0 (single set win) | 1.0 |
+| 1:0, 2:0, or 3:0 | 1.0 |
+| 3:1 | 0.75 |
 | 2:1 | 0.67 |
-| 1:1 | 0.5 |
+| 3:2 | 0.6 |
+| 1:1 or 2:2 | 0.5 |
+| 2:3 | 0.4 |
 | 1:2 | 0.33 |
-| 0:2 or 0:1 (single set loss) | 0.0 |
+| 1:3 | 0.25 |
+| 0:1, 0:2, or 0:3 | 0.0 |
 
 ### Application
 
@@ -55,7 +61,7 @@ x2 = -x1   (zero-sum: team 2 loses exactly what team 1 gains)
 - Both players on the **losing** team receive `+x2` (= `-x1`) each.
 - All games in a tournament day use the **pre-game RGX values** as `r1`/`r2` inputs — the player's RGX does not change between games within the same day.
 - The displayed daily delta is the **sum** of all per-game `x1` values computed against the fixed pre-tournament baseline.
-- Division upper/lower limits cap the **final end-of-day RGX** (after the sum is applied), not per-game results.
+- **No division caps apply.** Division RGX limits were removed; `total_delta` is a plain sum of per-game deltas with nothing clamped afterwards.
 
 ### New Players (no existing RGX)
 
@@ -63,27 +69,19 @@ Players without an existing RGX score (new players, shown with a 🆕 indicator 
 
 | Division | Proxy RGX |
 |----------|-----------|
-| Beginner | 1,000 |
-| Intermediate | 1,200 |
-| Advanced | 1,400 |
+| Beginner / Basic | 1,000 |
+| Intermediate | 1,100 |
+| Advanced | 1,250 |
+| Contender | 1,400 |
 | Pro | 1,600 |
-| Unknown / no division | 1,300 |
+| Unknown / no division | 1,200 |
+
+Contender is a distinct division from Pro — it is **not** treated as a synonym for Pro.
 
 In the real playerzone system, new players go through a pre-calculation round that produces their actual starting RGX. We omit this because it would require calculating all other players' scores simultaneously. The division default is a close enough approximation and this case is uncommon.
 
 **UI requirement**: whenever a new player (ours or an opponent) contributes to a delta calculation using a proxy value, display a disclaimer next to the result:
 > "Ein Spieler in diesem Spiel hat noch keine RGX. Der angezeigte Wert ist eine Schätzung."
-
-### Division Limits (caps applied after each game)
-
-| Division | Starting RGX | Upper limit | Lower limit |
-|----------|-------------|-------------|-------------|
-| Beginner | 1,000 | 1,215 | — |
-| Intermediate | 1,200 | 1,415 | — |
-| Advanced | 1,400 | 1,615 | 1,185 |
-| Pro | 1,600 | — | — |
-
-> **Implementation note**: The division of a player is determined by their pre-tournament registration. Cap the computed post-game RGX at the division limits before storing/displaying.
 
 ---
 
@@ -115,9 +113,13 @@ In the real playerzone system, new players go through a pre-calculation round th
 | Field | Source | Notes |
 |-------|--------|-------|
 | `opponent_name` | playerzone match row | |
-| `result` | playerzone match row | `W` / `L` / `D` |
-| `rgx_delta` | playerzone match row | Signed integer |
+| `result` | playerzone match row | `W` / `L` / `D`, or `C` if the game was cancelled |
+| `rgx_delta` | computed | Signed integer; always `0` for a cancelled game |
+| `rgx_delta_per_player` | computed | `rgx_delta / 2` |
+| `has_proxy` | computed | True if either team involved a player with no RGX (division default used) |
 | `round` | playerzone match row | Optional; include if available |
+| `was_cancelled` | playerzone match row | True if playerzone marked the game as cancelled (forfeit, injury, etc.) |
+| `sets` | playerzone match row | Array of `{our_score, opponent_score}`, oriented to our team, in play order; empty/partial for a cancelled game |
 
 ---
 

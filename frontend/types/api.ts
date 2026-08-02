@@ -19,17 +19,22 @@ export interface PlayerRef {
   rgx: number;
 }
 
-export type GameResult = "W" | "L" | "D";
+export type GameResult = "W" | "L" | "D" | "C";
+
+export interface SetScore {
+  our_score: number;
+  opponent_score: number;
+}
 
 export interface Game {
   round?: string;
   opponent_name: string;
   result: GameResult;
   rgx_delta: number;
+  rgx_delta_per_player: number;
   has_proxy: boolean;
-  // Not yet in docs/06-api-spec.md — render only when the backend supplies them.
-  format?: string;
-  sets?: ("W" | "L")[];
+  was_cancelled: boolean;
+  sets: SetScore[];
 }
 
 export interface TodayResultOk {

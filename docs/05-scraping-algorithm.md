@@ -149,7 +149,7 @@ FUNCTION GetTodayResult(player_id):
            (if opponent team contains a new player, this value already reflects the
             division proxy — the division teams page shows the combined value we use directly)
      b. Determine match format:
-        - 2 or 3 sets present → Best-of-3 → b = 1.0
+        - 2+ sets present → multi-set (Best-of-3 or Best-of-5) → b = 1.0
         - 1 set only → single-set → b = 0.75
      c. Determine p from set_scores:
         - Count sets won by each side
@@ -159,8 +159,7 @@ FUNCTION GetTodayResult(player_id):
         (both players on our team get the same delta)
      f. Store game result: {round, opponent_name, result (W/L/D), rgx_delta: delta}
 
-  8. total_delta = sum of all per-game deltas
-     Apply division caps once to (pre_tournament_player_rgx + total_delta)
+  8. total_delta = sum of all per-game deltas (no division caps applied)
 
   9. Cache result under key tournament:{player_id}:{today} with TTL:
      - Before 20:00 CET: 60 seconds
@@ -196,16 +195,44 @@ FUNCTION ResolveTeamRGX(players [], division_name) → (combined_rgx int, has_pr
 `has_proxy` propagates into the game result object:
 
 ```go
+type SetResult struct {
+    OurScore      int
+    OpponentScore int
+}
+
 type GameResult struct {
-    Round        string
-    OpponentName string
-    Result       string  // "W", "L", "D"
-    RGXDelta     int
-    HasProxy     bool    // true if any player in this game used a division default RGX
+    Round             string
+    OpponentName      string
+    Result            string  // "W", "L", "D", or "C" for a cancelled game
+    RGXDelta          int     // always 0 for a cancelled game
+    RGXDeltaPerPlayer float32
+    HasProxy          bool    // true if any player in this game used a division default RGX
+    WasCancelled      bool
+    Sets              []SetResult
 }
 ```
 
 The `has_proxy` flag on **any** game in a day's results causes the frontend to display the estimation disclaimer (see `03-data-requirements.md §New Players`).
+
+---
+
+### Cancelled games
+
+playerzone renders a cancelled game (forfeit, injury, etc.) the same way it renders a
+not-yet-played game — `outcome=""` on the `rg-game-card` element, since neither has a
+final win/loss outcome. The two are told apart by a `cancelled` class token on
+`rg-game-card` (and/or a `<span class="tag game-cancelled">` inside the tags slot),
+present only for actually-cancelled games:
+
+```
+IF outcome == "" AND NOT has "cancelled" marker:
+    SKIP this game entirely (scheduled, not yet played)
+ELSE IF outcome == "" AND has "cancelled" marker:
+    KEEP the game, mark was_cancelled = true, RGXDelta = 0
+    (whatever partial set scores exist are still reported, but never scored)
+ELSE:
+    KEEP the game, compute RGXDelta normally
+```
 
 ---
 

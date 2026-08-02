@@ -105,14 +105,36 @@ Gets or creates today's `RgxJob` for this player and returns it immediately — 
         "opponent_name": "Heidelberger Heidelbärinnen",
         "result": "W",
         "rgx_delta": 7,
-        "has_proxy": false
+        "rgx_delta_per_player": 3.5,
+        "has_proxy": false,
+        "was_cancelled": false,
+        "sets": [
+          { "our_score": 21, "opponent_score": 15 },
+          { "our_score": 21, "opponent_score": 18 }
+        ]
       },
       {
         "round": "Gr. A #2",
         "opponent_name": "Hanni & Anni",
         "result": "L",
         "rgx_delta": -3,
-        "has_proxy": false
+        "rgx_delta_per_player": -1.5,
+        "has_proxy": false,
+        "was_cancelled": false,
+        "sets": [
+          { "our_score": 15, "opponent_score": 21 },
+          { "our_score": 18, "opponent_score": 21 }
+        ]
+      },
+      {
+        "round": "Gr. A #3",
+        "opponent_name": "no grace",
+        "result": "C",
+        "rgx_delta": 0,
+        "rgx_delta_per_player": 0,
+        "has_proxy": false,
+        "was_cancelled": true,
+        "sets": []
       }
     ]
   }
@@ -188,6 +210,16 @@ Same `JobResponse` shape as above — `status: "queued"` (with `queue_position`)
 | `total_delta.has_proxy` (top-level) | Any game in today's set used a proxy value |
 
 The frontend displays a disclaimer whenever the top-level `has_proxy` is `true`.
+
+**`was_cancelled` / `sets` fields**
+
+| Field | Meaning |
+|-------|---------|
+| `games[n].was_cancelled` | The game was marked as cancelled on playerzone (forfeit, injury, etc.) and was never actually completed |
+| `games[n].sets` | The set scores for this game, from our team's perspective (`our_score`/`opponent_score`), in the order played. Empty or partial for a cancelled game. |
+| `games[n].result` | `"W"`/`"L"`/`"D"` as before, or `"C"` for a cancelled game |
+
+A cancelled game always has `rgx_delta: 0` and `rgx_delta_per_player: 0` — it never contributes to the day's rating change, but is still listed so the player can see it happened.
 
 ---
 
