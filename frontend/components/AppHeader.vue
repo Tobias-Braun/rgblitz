@@ -38,7 +38,15 @@
   width: 10px;
   height: 16px;
   background: var(--bg);
-  clip-path: polygon(46% 0, 100% 0, 54% 42%, 94% 42%, 16% 100%, 48% 54%, 2% 54%);
+  clip-path: polygon(
+    46% 0,
+    100% 0,
+    54% 42%,
+    94% 42%,
+    16% 100%,
+    48% 54%,
+    2% 54%
+  );
 }
 
 .wordmark {
@@ -62,7 +70,7 @@
 .alpha {
   margin-left: auto;
   align-self: center;
-  font: 600 9px/1 var(--font-mono);
+  font: 600 12px/1 var(--font-mono);
   letter-spacing: 0.16em;
   color: var(--text-dim);
   border: 1px solid var(--border);

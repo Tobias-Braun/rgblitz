@@ -2,7 +2,7 @@
 
 <template>
   <footer class="app-footer">
-    <a href="#" class="footer-link">FAQ</a>
+    <NuxtLink to="/faq" class="footer-link">FAQ</NuxtLink>
     <a href="#" class="footer-link">Datenschutz</a>
     <a href="#" class="footer-link">Impressum</a>
   </footer>
@@ -21,7 +21,7 @@
 }
 
 .footer-link {
-  font: 400 11px/1 var(--font-body);
+  font: 400 14px/1 var(--font-body);
   color: var(--text-dim);
   text-decoration: none;
 }
