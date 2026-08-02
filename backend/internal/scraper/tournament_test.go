@@ -155,6 +155,48 @@ func TestParseTeamSchedule_SkipsUnplayedGames(t *testing.T) {
 	}
 }
 
+func TestParseTeamSchedule_SkipsByeGames(t *testing.T) {
+	// Markup mirrors a real bye row (captured from playerzone.roundnetgermany.de/
+	// tournaments/schedule/team/61542): outcome="win", empty scores, and the
+	// opponent's onclick is "load_team_info(, )" with no team ID.
+	const html = `
+<div class="player-card">
+	<div class="info-player-name"><a class="info-text">Test Player</a></div>
+	<span class="rgx-value">1200</span>
+</div>
+<div id="game-1">
+	<rg-game-card outcome="win">
+		<div class="teams">
+			<div class="team winner"><a class="details" onclick="load_team_info(1, 100)"><span class="name">Us</span></a></div>
+			<div class="team loser"><a class="details" href="#!" onclick="load_team_info(, )"><span class="name">Bye</span></a></div>
+		</div>
+		<div class="scores"></div>
+	</rg-game-card>
+</div>
+<div id="game-2">
+	<rg-game-card outcome="win">
+		<div class="teams">
+			<div class="team"><a class="details" onclick="load_team_info(1, 100)"><span class="name">Us</span></a></div>
+			<div class="team"><a class="details" onclick="load_team_info(3, 300)"><span class="name">Played</span></a></div>
+		</div>
+		<div class="scores">
+			<div class="set"><span class="score">15</span><span class="score">10</span></div>
+		</div>
+	</rg-game-card>
+</div>
+`
+	result, err := scraper.ParseTeamSchedule(strings.NewReader(html), 100)
+	if err != nil {
+		t.Fatalf("ParseTeamSchedule: %v", err)
+	}
+	if len(result.Games) != 1 {
+		t.Fatalf("expected 1 game (bye should be skipped), got %d: %+v", len(result.Games), result.Games)
+	}
+	if result.Games[0].OpponentName != "Played" {
+		t.Errorf("expected the played game to remain, got opponent %q", result.Games[0].OpponentName)
+	}
+}
+
 func TestParseTeamSchedule_KeepsCancelledGames(t *testing.T) {
 	const html = `
 <div class="player-card">

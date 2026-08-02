@@ -249,8 +249,16 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 
 		weAreTeamOne := false
 		opponentName := ""
+		isBye := false
 
 		teamDivs.Each(func(i int, t *goquery.Selection) {
+			name := strings.TrimSpace(t.Find("span.name").Text())
+			if isByeName(name) {
+				// Bye rows render with an empty load_team_info(, ) onclick, so the
+				// team-ID match below never fires for them and opponentName would
+				// otherwise stay "" — misreporting as a draw against an unknown team.
+				isBye = true
+			}
 			onclick, _ := t.Find("a.details").Attr("onclick")
 			m := reTournamentTeamIDOnclick.FindStringSubmatch(onclick)
 			if len(m) >= 2 {
@@ -258,10 +266,17 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 				if tid == ourTeamID {
 					weAreTeamOne = (i == 0)
 				} else {
-					opponentName = strings.TrimSpace(t.Find("span.name").Text())
+					opponentName = name
 				}
 			}
 		})
+
+		// A "Bye"/"Freilos" row is an automatic advance, not a played game — omit
+		// it from the schedule entirely instead of letting it fall through to
+		// MatchP's 0:0 default (p=0.5), which would misreport it as a draw.
+		if isBye {
+			return
+		}
 
 		// Parse set scores in order; each div.set contains exactly two span.score children.
 		var sets []SetScore
@@ -287,6 +302,14 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 	})
 
 	return result, nil
+}
+
+// isByeName reports whether a team-slot name marks an automatic-advance row rather than
+// a real opponent. Playerzone renders these as "Bye" in English; "Freilos" is the German
+// term used in the product/domain docs, so it's matched defensively too.
+func isByeName(name string) bool {
+	lower := strings.ToLower(name)
+	return lower == "bye" || lower == "freilos"
 }
 
 // cleanPlayerName strips nickname patterns like `Joceline "Jocie" Hinz` → `Joceline  Hinz`
