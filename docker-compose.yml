@@ -1,6 +1,6 @@
 services:
   backend:
-    build: ./backend
+    image: ghcr.io/tobias-braun/rgblitz-backend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       TZ: Europe/Berlin
@@ -12,14 +12,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   frontend:
-    build: ./frontend
+    image: ghcr.io/tobias-braun/rgblitz-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE}
     depends_on:
       - backend
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   caddy:
     image: caddy:2-alpine
@@ -37,6 +41,17 @@ services:
     depends_on:
       - backend
       - frontend
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_CONFIG_FILE}:/config.json:ro
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: 300
 
 volumes:
   backend_data:
