@@ -36,6 +36,7 @@ Every scrape (cron-triggered, startup-triggered, or via `Scheduler.ScrapeNow()`)
 - **Game-info pages** (`/tournaments/game-info/{id}`) require login — they are out of scope. RGX is computed, not scraped.
 - **Stale-on-error is not wired up in production.** `TodayResult.Stale` exists and the frontend has a full UI for it (`ResultStale.vue`), but nothing in the real scrape path sets it — a failed job just becomes `status: "error"`. The only place `Stale: true` is produced is the `DEV_MODE` fixture player `dev-stale`. Don't assume a live stale-cache fallback exists; if you're asked to add one, it needs new logic in `internal/jobqueue`.
 - **Image proxy is origin-restricted, not a generic passthrough.** `isAllowedImageOrigin` (`internal/api/handlers.go`) only allows `https://` URLs whose host is exactly `pstaassets.blob.core.windows.net`/`playerzone.roundnetgermany.de` or a proper subdomain of one — never loosen this to a `strings.HasSuffix` check without a label-boundary guard, since Azure blob container names are self-service and a naive suffix check is bypassable (e.g. `evilpstaassets.blob.core.windows.net`).
+- **RgxJob usage stats (`rgx_jobs_stats`) persist independently of `rgx_jobs`.** `rgx_jobs` is purged daily by cron; `rgx_jobs_stats` (`internal/db/stats.go`) is a separate, never-purged table recording one row per *genuinely created* job (never for a job reused from the dedup/freshness cache, and never for `DEV_MODE` synthetic jobs). `GET /api/stats/rgx-jobs` aggregates it for the frontend footer's all-time usage stat.
 
 ## RGX formula (implement exactly)
 
@@ -77,7 +78,7 @@ internal/api/       # HTTP handlers + router
 internal/scraper/   # HTML parsers, fetcher, rate limiter, robots.txt permission check
 internal/jobqueue/  # single-worker queue that drains RgxJob rows through the scraper
 internal/cache/     # in-memory TTL cache
-internal/db/        # SQLite access layer (PlayerStore, JobStore, PermissionStore)
+internal/db/        # SQLite access layer (PlayerStore, JobStore, JobStatsStore, PermissionStore)
 internal/cron/      # weekly scrape job + daily RgxJob cleanup (Scheduler)
 internal/config/    # env-based config
 ```
@@ -103,6 +104,7 @@ components/
 composables/
   useBattery.ts       # wraps navigator.getBattery() + prefers-reduced-motion, exposes isFastMode
   useTodayResult.ts   # drives job-create → poll-every-2s-until-final-status flow
+  useRgxJobStats.ts   # non-blocking (lazy) fetch of /api/stats/rgx-jobs for the footer's served-count stat
 config/
   mood-phrases.ts     # RGX-delta bracket → German phrase map
   queue-phrases.ts    # queue-position bracket → German phrase map

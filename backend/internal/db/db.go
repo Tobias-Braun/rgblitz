@@ -59,6 +59,22 @@ func migrate(db *sql.DB) error {
 		);
 		CREATE INDEX IF NOT EXISTS idx_rgx_jobs_player_date ON rgx_jobs(player_id, date);
 		CREATE INDEX IF NOT EXISTS idx_rgx_jobs_status_queued ON rgx_jobs(status, queued_at);
+
+		-- rgx_jobs_stats is a permanent usage log, deliberately separate from rgx_jobs
+		-- (which is purged daily by cron — see internal/cron). One row per genuinely
+		-- created job; cache hits that reuse an existing rgx_jobs row never insert here.
+		-- job_id is not a foreign key on purpose: rgx_jobs rows disappear daily, these
+		-- must not.
+		CREATE TABLE IF NOT EXISTS rgx_jobs_stats (
+			id             INTEGER PRIMARY KEY AUTOINCREMENT,
+			job_id         INTEGER NOT NULL UNIQUE,
+			player_id      TEXT NOT NULL,
+			tournament_id  INTEGER,
+			status         TEXT NOT NULL,
+			created_at     DATETIME NOT NULL,
+			finished_at    DATETIME
+		);
+		CREATE INDEX IF NOT EXISTS idx_rgx_jobs_stats_status ON rgx_jobs_stats(status);
 	`)
 	return err
 }

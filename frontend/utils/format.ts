@@ -25,6 +25,43 @@ export function withApiBase(path: string, apiBase: string): string {
   return `${apiBase}${path}`
 }
 
+// Abbreviates a non-negative integer to at most 4 characters for the header's
+// "Happily served N RGX changes" stat, e.g. 1074 -> "1.1K", 999500 -> "1.0M".
+// One decimal is used while the scaled value is still a single digit (keeps
+// "1.1K" at 4 chars); above that the decimal is dropped ("12K"). Rounding can
+// push a value across a unit boundary (999.95K -> "1000K"), so the result is
+// re-escalated to the next unit whenever that happens.
+export function formatCompactCount(n: number): string {
+  if (n < 1000) return String(Math.round(n))
+
+  const units = ['K', 'M', 'B', 'T']
+  let value = n
+  let unitIndex = -1
+  while (value >= 1000 && unitIndex < units.length - 1) {
+    value /= 1000
+    unitIndex++
+  }
+
+  // toFixed(1) can itself round a value like 9.999 up into double digits
+  // ("10.0") — fall back to the no-decimal form when that happens.
+  const render = (v: number): string => {
+    if (v < 10) {
+      const withDecimal = v.toFixed(1)
+      return parseFloat(withDecimal) < 10 ? withDecimal : String(Math.round(v))
+    }
+    return String(Math.round(v))
+  }
+  let display = render(value)
+
+  if (parseFloat(display) >= 1000 && unitIndex < units.length - 1) {
+    value /= 1000
+    unitIndex++
+    display = render(value)
+  }
+
+  return `${display}${units[unitIndex]}`
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return ''

@@ -26,6 +26,7 @@ func main() {
 	players := db.NewPlayerStore(database)
 	permissions := db.NewPermissionStore(database)
 	jobs := db.NewJobStore(database)
+	jobStats := db.NewJobStatsStore(database)
 	memCache := cache.New()
 
 	// One request to playerzone every 2 seconds across all goroutines.
@@ -52,7 +53,7 @@ func main() {
 	defer scheduler.Stop()
 
 	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: memCache, ProxyURL: api.ProxyURL}
-	queue := jobqueue.New(jobs, players, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
+	queue := jobqueue.New(jobs, jobStats, players, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
 
 	// Recover any job left "running" by a crash mid-scrape, then start the
 	// single background worker that drains the queue in FIFO order.
@@ -65,7 +66,7 @@ func main() {
 	}
 	queue.Start()
 
-	handler := api.NewHandler(cfg, players, memCache, fetcher, permissions, jobs, queue)
+	handler := api.NewHandler(cfg, players, memCache, fetcher, permissions, jobs, jobStats, queue)
 	router := api.NewRouter(handler)
 
 	addr := ":" + cfg.Port

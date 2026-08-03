@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,7 +49,11 @@ type ScrapeDeps struct {
 // player, always attempting the scrape regardless of the current
 // weekday/time window. Callers are responsible for the weekday/time-window
 // guard and any result caching.
-func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (TodayResult, error) {
+//
+// The second return value is the numeric playerzone tournament ID the result
+// was computed from (0 if the player has no tournament today) — used by the
+// job worker to record usage statistics, not part of the JSON API response.
+func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (TodayResult, int, error) {
 	pInfo := &PlayerInfo{
 		ID:          player.ID,
 		Name:        player.Name,
@@ -61,12 +66,12 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 
 	numericID, err := NumericPlayerID(player.ID)
 	if err != nil {
-		return TodayResult{}, fmt.Errorf("resolve numeric player ID: %w", err)
+		return TodayResult{}, 0, fmt.Errorf("resolve numeric player ID: %w", err)
 	}
 
 	entries, err := fetchProfileEntries(deps, numericID)
 	if err != nil {
-		return TodayResult{}, fmt.Errorf("fetch player profile: %w", err)
+		return TodayResult{}, 0, fmt.Errorf("fetch player profile: %w", err)
 	}
 
 	today := now.Format("02.01.06")
@@ -80,28 +85,30 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		}
 	}
 	if !found {
-		return TodayResult{Status: "no_tournament", Player: pInfo}, nil
+		return TodayResult{Status: "no_tournament", Player: pInfo}, 0, nil
 	}
 
 	schedule, sidebar, err := fetchTeamScheduleAndSidebar(deps, teamID)
 	if err != nil {
-		return TodayResult{}, fmt.Errorf("fetch team schedule: %w", err)
+		return TodayResult{}, 0, fmt.Errorf("fetch team schedule: %w", err)
 	}
 
 	var teamsPath string
+	var tournamentID int
 	for _, d := range sidebar {
 		if strings.EqualFold(d.Name, schedule.DivisionName) {
 			teamsPath = d.TeamsPath
+			tournamentID, _ = strconv.Atoi(d.TournamentID)
 			break
 		}
 	}
 	if teamsPath == "" {
-		return TodayResult{}, fmt.Errorf("division %q not found in schedule page sidebar", schedule.DivisionName)
+		return TodayResult{}, 0, fmt.Errorf("division %q not found in schedule page sidebar", schedule.DivisionName)
 	}
 
 	divisionTeams, err := fetchDivisionTeamsByPath(deps, teamsPath)
 	if err != nil {
-		return TodayResult{}, fmt.Errorf("fetch division teams: %w", err)
+		return TodayResult{}, 0, fmt.Errorf("fetch division teams: %w", err)
 	}
 
 	var ourTeam TeamEntry
@@ -166,7 +173,7 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		TotalDelta: totalDelta,
 		HasProxy:   hasProxy,
 		Games:      games,
-	}, nil
+	}, tournamentID, nil
 }
 
 // --- playerzone fetchers (live or fixture-backed, via deps.Fetcher) ---

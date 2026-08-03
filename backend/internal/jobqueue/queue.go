@@ -18,6 +18,7 @@ import (
 // Queue enqueues job IDs for a single background worker to process.
 type Queue struct {
 	jobs              *db.JobStore
+	stats             *db.JobStatsStore
 	players           *db.PlayerStore
 	deps              scraper.ScrapeDeps
 	permissions       *db.PermissionStore
@@ -26,9 +27,10 @@ type Queue struct {
 	ch                chan int64
 }
 
-func New(jobs *db.JobStore, players *db.PlayerStore, deps scraper.ScrapeDeps, permissions *db.PermissionStore, respectPermission bool, now func() time.Time) *Queue {
+func New(jobs *db.JobStore, stats *db.JobStatsStore, players *db.PlayerStore, deps scraper.ScrapeDeps, permissions *db.PermissionStore, respectPermission bool, now func() time.Time) *Queue {
 	return &Queue{
 		jobs:              jobs,
+		stats:             stats,
 		players:           players,
 		deps:              deps,
 		permissions:       permissions,
@@ -86,7 +88,7 @@ func (q *Queue) process(jobID int64) {
 	// whenever the worker happens to get around to it — a job processed a few
 	// seconds late (or, in a test, with a frozen/overridden clock) must still
 	// compute "today" the way the requester saw it.
-	result, err := scraper.ScrapePlayerToday(q.deps, player, job.QueuedAt)
+	result, tournamentID, err := scraper.ScrapePlayerToday(q.deps, player, job.QueuedAt)
 	if err != nil {
 		q.fail(jobID, err.Error())
 		return
@@ -98,14 +100,26 @@ func (q *Queue) process(jobID int64) {
 		return
 	}
 
-	if err := q.jobs.MarkDone(jobID, string(resultJSON), q.now()); err != nil {
+	now := q.now()
+	if err := q.jobs.MarkDone(jobID, string(resultJSON), now); err != nil {
 		log.Printf("jobqueue: mark job %d done: %v", jobID, err)
+	}
+	if q.stats != nil {
+		if err := q.stats.MarkDone(jobID, tournamentID, now); err != nil {
+			log.Printf("jobqueue: mark job stats %d done: %v", jobID, err)
+		}
 	}
 }
 
 func (q *Queue) fail(jobID int64, msg string) {
 	log.Printf("jobqueue: job %d failed: %s", jobID, msg)
-	if err := q.jobs.MarkError(jobID, msg, q.now()); err != nil {
+	now := q.now()
+	if err := q.jobs.MarkError(jobID, msg, now); err != nil {
 		log.Printf("jobqueue: mark job %d error: %v", jobID, err)
+	}
+	if q.stats != nil {
+		if err := q.stats.MarkError(jobID, now); err != nil {
+			log.Printf("jobqueue: mark job stats %d error: %v", jobID, err)
+		}
 	}
 }

@@ -87,9 +87,12 @@ func main() {
 
 	fmt.Println("step 2/2: running the scrape+RGX pipeline (profile → schedule → division sidebar → division teams) ...")
 	deps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: cache.New(), ProxyURL: func(s string) string { return s }}
-	resp, err := scraper.ScrapePlayerToday(deps, player, now)
+	resp, tournamentID, err := scraper.ScrapePlayerToday(deps, player, now)
 	if err != nil {
 		fatalf("pipeline error: %v", err)
+	}
+	if tournamentID != 0 {
+		fmt.Printf("  tournament id: %d\n", tournamentID)
 	}
 
 	printTodayResponse(resp)

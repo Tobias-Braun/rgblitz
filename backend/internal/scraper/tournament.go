@@ -13,9 +13,10 @@ import (
 
 // Division is a competition category within a tournament.
 type Division struct {
-	ID        string // numeric string from URL, e.g. "2265"
-	Name      string
-	TeamsPath string // full path to this division's teams page, e.g. "/tournaments/692-.../teams/2265"
+	ID           string // numeric division ID from URL, e.g. "2265"
+	TournamentID string // numeric tournament ID from URL, e.g. "692"
+	Name         string
+	TeamsPath    string // full path to this division's teams page, e.g. "/tournaments/692-.../teams/2265"
 }
 
 // TeamEntry is a team found on a division's teams page.
@@ -84,8 +85,9 @@ type GameResult struct {
 // reTournamentTeamID matches onclick="load_team_info(\d+, 60615)".
 var reTournamentTeamIDOnclick = regexp.MustCompile(`load_team_info\(\d+,\s*(\d+)\)`)
 
-// reDivisionTeamsHref matches /tournaments/{id}-{slug}/teams/{div_id}.
-var reDivisionTeamsHref = regexp.MustCompile(`/tournaments/[^/]+/teams/(\d+)$`)
+// reDivisionTeamsHref matches /tournaments/{id}-{slug}/teams/{div_id}, capturing
+// both the tournament ID and the division ID.
+var reDivisionTeamsHref = regexp.MustCompile(`/tournaments/(\d+)-[^/]+/teams/(\d+)$`)
 
 // ParseDivisionSidebar extracts every division of the tournament from the sidebar
 // rendered on a team schedule page (/tournaments/schedule/team/{id}), keyed by
@@ -106,22 +108,23 @@ func ParseDivisionSidebar(r io.Reader) ([]Division, error) {
 		}
 
 		var teamsPath string
-		var divID string
+		var tournamentID, divID string
 		sec.Find("div.big-title a[href]").EachWithBreak(func(_ int, a *goquery.Selection) bool {
 			href, _ := a.Attr("href")
 			m := reDivisionTeamsHref.FindStringSubmatch(href)
-			if len(m) < 2 {
+			if len(m) < 3 {
 				return true // keep looking; this a wasn't the teams link
 			}
 			teamsPath = href
-			divID = m[1]
+			tournamentID = m[1]
+			divID = m[2]
 			return false
 		})
 		if teamsPath == "" {
 			return
 		}
 
-		divs = append(divs, Division{ID: divID, Name: name, TeamsPath: teamsPath})
+		divs = append(divs, Division{ID: divID, TournamentID: tournamentID, Name: name, TeamsPath: teamsPath})
 	})
 
 	if len(divs) == 0 {

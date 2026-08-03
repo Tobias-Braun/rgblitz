@@ -20,6 +20,7 @@
 │  /api/players/{id}/today (job create)   │
 │  /api/players/{id}/today/jobs/{jobId}   │
 │  /api/images/proxy (image cache)        │
+│  /api/stats/rgx-jobs (usage stats)      │
 │                                         │
 │  ┌──────────────┐  ┌──────────────────┐ │
 │  │  Player DB   │  │  In-memory TTL   │ │
@@ -59,8 +60,11 @@
 | `ResultLoading.vue` | State 2a — skeleton + queue-position phrase while a scrape job is in flight |
 | `ResultStale.vue` | State 2b — offers retry vs. accept-stale-result when a live fetch fails but cached data exists |
 | `ResultError.vue` | State 2c — hard failure with no cached fallback |
+| `AppHeader.vue` | Logo/wordmark bar |
+| `AppFooter.vue` | Footer links; also renders the "N RGX-Anfragen beantwortet" all-time usage stat via `useRgxJobStats` |
 | `useBattery.ts` (composable) | Wraps `navigator.getBattery()` and `prefers-reduced-motion`, exposes `isFastMode` |
 | `useTodayResult.ts` (composable) | Drives the job-create → poll-until-final-status flow behind `/api/players/:id/today` |
+| `useRgxJobStats.ts` (composable) | Non-blocking (`lazy: true`) fetch of `/api/stats/rgx-jobs` for the footer's all-time usage stat; SSR-rendered when it resolves in time, filled in client-side otherwise |
 | `mood-phrases.ts` | Static config file: RGX-delta brackets → German phrase strings |
 | `queue-phrases.ts` | Static config file: queue-position brackets → German phrase strings |
 
@@ -82,14 +86,14 @@ See `docs/02-ui-requirements.md` for the full state list and behavior of each.
 cmd/
   server/         # main.go — wires up router, runs HTTP server and cron
 internal/
-  api/            # HTTP handlers (search, today job create/poll, image proxy)
+  api/            # HTTP handlers (search, today job create/poll, image proxy, usage stats)
   scraper/        # playerzone HTML scrapers + scrape orchestration
     player.go     # scrapes player list + profile pages
     tournament.go # parses a team schedule page into per-game RGX deltas
     orchestrate.go # ScrapePlayerToday — the full home→tournament→division→schedule hop, run off the request path
   jobqueue/       # single-worker queue draining RgxJob rows through the shared rate limiter
   cache/          # in-memory TTL cache for tournament results + images
-  db/             # database access layer (player index, RgxJob store, permission store)
+  db/             # database access layer (player index, RgxJob store, permanent RgxJob usage-stats store, permission store)
   cron/           # weekly player-index scrape + daily RgxJob cleanup scheduler
   config/         # env-based config (port, DB path, scrape interval, etc.)
 ```

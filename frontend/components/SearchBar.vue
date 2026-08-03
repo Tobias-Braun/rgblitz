@@ -7,10 +7,24 @@
 import { ref, watch, nextTick } from "vue";
 import type { PlayerSummary } from "~/types/api";
 import { useBattery } from "~/composables/useBattery";
+import { computed } from "vue";
+import { useRgxJobStats } from "~/composables/useRgxJobStats";
+import { formatCompactCount } from "~/utils/format";
 
 const emit = defineEmits<{
   select: [player: PlayerSummary];
 }>();
+
+const { data: stats } = useRgxJobStats();
+
+// Rendered only once the count is known — never a placeholder/loading state,
+// so a slow or failed fetch just means the chip stays absent.
+const servedText = computed(() => {
+  const succeeded = stats.value?.succeeded;
+  if (succeeded === undefined || succeeded === null || succeeded < 100)
+    return null;
+  return `${formatCompactCount(succeeded)}`;
+});
 
 const { isFastMode } = useBattery();
 const config = useRuntimeConfig();
@@ -49,10 +63,6 @@ watch(query, (value) => {
     }
   }, 200);
 });
-
-function onFocus() {
-  isFocused.value = true;
-}
 
 function cancel() {
   query.value = "";
@@ -130,6 +140,10 @@ async function focusInput() {
 
     <div v-else class="hero">
       <div class="hero-copy">
+        <span v-if="servedText" class="served-chip">
+          <span class="served-dot" />
+          <b>{{ servedText }}</b> Anfragen beantwortet
+        </span>
         <h1>Dein RGX,<br />noch auf dem Feld.</h1>
         <p>
           Such deinen Namen und sieh sofort, wie viele Punkte du heute geholt
@@ -374,6 +388,27 @@ async function focusInput() {
   text-align: center;
   animation: fade-up 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   animation-delay: 0.24s;
+}
+
+.served-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: 400 12px/1 var(--font-mono);
+  color: var(--text-dim);
+  animation: fade-up 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.served-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: linear-gradient(160deg, var(--amber-1), var(--amber-2));
 }
 
 @keyframes fade-up {

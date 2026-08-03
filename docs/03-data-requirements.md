@@ -177,10 +177,35 @@ Full REST API specification is in `06-api-spec.md`. Summary of endpoints:
 | `GET` | `/api/players/:id/today` | Gets or creates today's scrape job for a player; returns immediately, never blocks on a live scrape |
 | `GET` | `/api/players/:id/today/jobs/:jobId` | Polls the status/result of a job created above |
 | `GET` | `/api/images/proxy?url=` | CDN image proxy with disk cache |
+| `GET` | `/api/stats/rgx-jobs` | All-time RgxJob usage counts (created/succeeded/failed) — see §Usage Statistics |
 
 Response time target for `/api/players/search`: < 100 ms (DB-only, no remote call).
 
 The live scrape itself runs on a single background worker (`internal/jobqueue`) rather than inline in the request handler — this is what lets multiple concurrent users each get an instant response while still serializing every outbound playerzone request through one rate limiter. See `04-architecture.md §Data Flow` for the full request lifecycle.
+
+---
+
+## Usage Statistics
+
+A separate table, `rgx_jobs_stats`, records permanent (never purged) usage counts, independent of the `rgx_jobs` table's daily cleanup (see §Backend API and `internal/cron`).
+
+**Why a separate table**: `rgx_jobs` rows are purged daily by cron. All-time usage counts need to survive that purge, so they live in their own table rather than being derived from `rgx_jobs` at query time.
+
+| Field | Meaning |
+|-------|---------|
+| `job_id` | The originating `rgx_jobs.id` — not a foreign key on purpose, since that row is purged daily while this one persists |
+| `player_id` | Player the job was created for |
+| `tournament_id` | Numeric playerzone tournament ID (from `/tournaments/{id}-{slug}/...`) the job resolved to; `NULL` if the job errored before resolving one, or the player had no tournament today |
+| `status` | `queued` (set at creation) → `done` or `error` (set when the job finishes) |
+| `created_at` / `finished_at` | Timestamps |
+
+**Write rules**:
+
+- A row is inserted **only** when a genuinely new `rgx_jobs` row is created (`internal/api/handlers.go TodayResult`) — never when an existing job is reused because it's still in flight or within the 15-minute freshness window (see `06-api-spec.md`).
+- The row is updated to `done`/`error` by the background worker (`internal/jobqueue`) when the job finishes — the same place that marks the underlying `rgx_jobs` row done/error.
+- Dev-mode synthetic jobs (`dev-ok`/`dev-stale`/`dev-error`/`dev-loading`, and the no-job-at-all dev-mode path for real players) never write to this table — only real production scrapes count toward usage stats.
+
+**Reads**: `GET /api/stats/rgx-jobs` aggregates all-time totals with a single indexed `COUNT`/`SUM` query over `status` (see `06-api-spec.md`). If this table ever grows large enough for that aggregation to become slow, replace it with running counters updated alongside the writes above instead of re-aggregating the whole table on every read.
 
 ---
 

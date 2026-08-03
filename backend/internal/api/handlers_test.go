@@ -65,7 +65,7 @@ func (f noNetworkFetcher) Fetch(path string) (io.ReadCloser, error) {
 // worker is already started, so a "queued" job transitions to "done"/"error" in the
 // background exactly as it would in production — tests that need the final result must
 // poll pollJobUntilFinal rather than expecting a synchronous response.
-func newTestHandler(t *testing.T, fetcher scraper.Fetcher, cfg *config.Config) (*api.Handler, *db.PlayerStore, *db.PermissionStore, *db.JobStore) {
+func newTestHandler(t *testing.T, fetcher scraper.Fetcher, cfg *config.Config) (*api.Handler, *db.PlayerStore, *db.PermissionStore, *db.JobStore, *db.JobStatsStore) {
 	t.Helper()
 
 	f, err := os.Open(rankingFixture)
@@ -98,14 +98,15 @@ func newTestHandler(t *testing.T, fetcher scraper.Fetcher, cfg *config.Config) (
 	}
 	permissions := db.NewPermissionStore(conn)
 	jobs := db.NewJobStore(conn)
+	jobStats := db.NewJobStatsStore(conn)
 
 	c := cache.New()
 	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: c, ProxyURL: api.ProxyURL}
-	queue := jobqueue.New(jobs, store, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
+	queue := jobqueue.New(jobs, jobStats, store, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
 	queue.Start()
 
-	h := api.NewHandler(cfg, store, c, fetcher, permissions, jobs, queue)
-	return h, store, permissions, jobs
+	h := api.NewHandler(cfg, store, c, fetcher, permissions, jobs, jobStats, queue)
+	return h, store, permissions, jobs, jobStats
 }
 
 // pollJobUntilFinal polls GET /api/players/{id}/today/jobs/{jobId} until the job reaches
@@ -135,7 +136,7 @@ func pollJobUntilFinal(t *testing.T, router http.Handler, playerID string, jobID
 }
 
 func TestSearchPlayers_HappyPath(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	h, _, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
 	router := api.NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/players/search?q=Lucas", nil)
@@ -165,7 +166,7 @@ func TestSearchPlayers_HappyPath(t *testing.T) {
 }
 
 func TestSearchPlayers_QueryTooShort(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	h, _, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
 	router := api.NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/players/search?q=a", nil)
@@ -179,7 +180,7 @@ func TestSearchPlayers_QueryTooShort(t *testing.T) {
 
 func TestTodayResult_DevMode(t *testing.T) {
 	cfg := &config.Config{DevMode: true}
-	h, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
+	h, _, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
 	router := api.NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/players/"+testPlayerID+"/today", nil)
@@ -204,7 +205,7 @@ func TestTodayResult_DevMode(t *testing.T) {
 
 func TestTodayResult_DevSpecialOk_CreatesImmediatelyDoneJob(t *testing.T) {
 	cfg := &config.Config{DevMode: true}
-	h, _, _, jobs := newTestHandler(t, noNetworkFetcher{t}, cfg)
+	h, _, _, jobs, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
 	router := api.NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/players/dev-ok/today", nil)
@@ -237,7 +238,7 @@ func TestTodayResult_DevSpecialOk_CreatesImmediatelyDoneJob(t *testing.T) {
 
 func TestTodayResult_DevSpecialLoading_ResolvesInBackground(t *testing.T) {
 	cfg := &config.Config{DevMode: true}
-	h, _, _, jobs := newTestHandler(t, noNetworkFetcher{t}, cfg)
+	h, _, _, jobs, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
 	router := api.NewRouter(h)
 
 	start := time.Now()
@@ -295,7 +296,7 @@ func TestTodayResult_DevSpecialLoading_ResolvesInBackground(t *testing.T) {
 }
 
 func TestTodayResult_WeekdayGuard_NoNetwork(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, nil)
+	h, _, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, nil)
 	h.Now = func() time.Time { return time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC) } // Wednesday
 	router := api.NewRouter(h)
 
@@ -316,7 +317,7 @@ func TestTodayResult_WeekdayGuard_NoNetwork(t *testing.T) {
 }
 
 func TestTodayResult_WeekendBeforeWindow_NoNetwork(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, nil)
+	h, _, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, nil)
 	h.Now = func() time.Time { return time.Date(2026, 7, 19, 5, 0, 0, 0, time.UTC) } // Sunday 07:00 Europe/Berlin (CEST), before the 08:00 window
 	router := api.NewRouter(h)
 
@@ -338,7 +339,7 @@ func TestTodayResult_WeekendBeforeWindow_NoNetwork(t *testing.T) {
 
 func TestTodayResult_RespectPermission_BlocksWhenDisallowed(t *testing.T) {
 	cfg := &config.Config{RespectPermission: true}
-	h, _, permissions, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
+	h, _, permissions, _, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
 	if err := permissions.Set(false, time.Now()); err != nil {
 		t.Fatalf("seed permission: %v", err)
 	}
@@ -363,7 +364,7 @@ func TestTodayResult_RespectPermission_BlocksWhenDisallowed(t *testing.T) {
 
 func TestTodayResult_RespectPermission_NoStoredCheckBlocks(t *testing.T) {
 	cfg := &config.Config{RespectPermission: true}
-	h, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
+	h, _, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
 	h.Now = func() time.Time { return fixtureDate }
 	router := api.NewRouter(h)
 
@@ -382,7 +383,7 @@ func TestTodayResult_RespectPermission_NoStoredCheckBlocks(t *testing.T) {
 
 func TestTodayResult_LiveScrapeAndCache(t *testing.T) {
 	fetcher := &countingFetcher{inner: scraper.NewFixtureFetcher(fixtureDir)}
-	h, _, _, _ := newTestHandler(t, fetcher, nil)
+	h, _, _, _, _ := newTestHandler(t, fetcher, nil)
 	h.Now = func() time.Time { return fixtureDate }
 	router := api.NewRouter(h)
 
@@ -449,7 +450,7 @@ func TestTodayResult_LiveScrapeAndCache(t *testing.T) {
 }
 
 func TestTodayResult_UnknownPlayer(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	h, _, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
 	router := api.NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/players/DOES-NOT-EXIST/today", nil)
@@ -462,7 +463,7 @@ func TestTodayResult_UnknownPlayer(t *testing.T) {
 }
 
 func TestProxyImage_MissingURL(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	h, _, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
 	router := api.NewRouter(h)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/images/proxy", nil)
@@ -475,7 +476,7 @@ func TestProxyImage_MissingURL(t *testing.T) {
 }
 
 func TestProxyImage_DisallowedOrigin(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	h, _, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
 	router := api.NewRouter(h)
 
 	encoded := base64.URLEncoding.EncodeToString([]byte("https://evil.example.com/x.jpg"))
@@ -494,7 +495,7 @@ func TestProxyImage_DisallowedOrigin(t *testing.T) {
 // allowed host string. Azure blob storage account names are self-service, so
 // this must be rejected as a distinct host, not just any suffix match.
 func TestProxyImage_SuffixBypass(t *testing.T) {
-	h, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	h, _, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
 	router := api.NewRouter(h)
 
 	encoded := base64.URLEncoding.EncodeToString([]byte("https://evilpstaassets.blob.core.windows.net/x.jpg"))
@@ -504,5 +505,107 @@ func TestProxyImage_SuffixBypass(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRgxJobStats_Empty(t *testing.T) {
+	h, _, _, _, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+	router := api.NewRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/stats/rgx-jobs", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var resp api.RgxJobStatsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp != (api.RgxJobStatsResponse{}) {
+		t.Errorf("stats on empty table = %+v, want all zero", resp)
+	}
+}
+
+// TestRgxJobStats_TracksRealScrapesOnly proves the three usage-stats
+// requirements together: a freshly created job records a "created" row that
+// flips to "succeeded" once the scrape completes, a second request served
+// from the freshness cache does not create a second row, and dev-mode
+// synthetic players never touch the stats table at all.
+func TestRgxJobStats_TracksRealScrapesOnly(t *testing.T) {
+	fetcher := scraper.NewFixtureFetcher(fixtureDir)
+	h, _, _, _, _ := newTestHandler(t, fetcher, nil)
+	h.Now = func() time.Time { return fixtureDate }
+	router := api.NewRouter(h)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/players/"+testPlayerID+"/today", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	var jobResp api.JobResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &jobResp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if jobResp.Status != "queued" || jobResp.JobID == 0 {
+		t.Fatalf("first request status = %+v, want a queued job", jobResp)
+	}
+
+	final := pollJobUntilFinal(t, router, testPlayerID, jobResp.JobID)
+	if final.Status != "done" {
+		t.Fatalf("final job status = %+v, want done", final)
+	}
+
+	statsReq := httptest.NewRequest(http.MethodGet, "/api/stats/rgx-jobs", nil)
+	statsRec := httptest.NewRecorder()
+	router.ServeHTTP(statsRec, statsReq)
+	var stats api.RgxJobStatsResponse
+	if err := json.Unmarshal(statsRec.Body.Bytes(), &stats); err != nil {
+		t.Fatalf("decode stats: %v", err)
+	}
+	if stats.Created != 1 || stats.Succeeded != 1 || stats.Failed != 0 {
+		t.Fatalf("stats after one completed scrape = %+v, want created=1 succeeded=1 failed=0", stats)
+	}
+
+	// A second request within the freshness window is served from cache — must
+	// not create a second rgx_jobs_stats row.
+	rec2 := httptest.NewRecorder()
+	router.ServeHTTP(rec2, req)
+	var jobResp2 api.JobResponse
+	if err := json.Unmarshal(rec2.Body.Bytes(), &jobResp2); err != nil {
+		t.Fatalf("decode second response: %v", err)
+	}
+	if jobResp2.Status != "done" {
+		t.Fatalf("second request status = %q, want cached done", jobResp2.Status)
+	}
+
+	statsRec2 := httptest.NewRecorder()
+	router.ServeHTTP(statsRec2, statsReq)
+	var statsAfterCacheHit api.RgxJobStatsResponse
+	if err := json.Unmarshal(statsRec2.Body.Bytes(), &statsAfterCacheHit); err != nil {
+		t.Fatalf("decode stats after cache hit: %v", err)
+	}
+	if statsAfterCacheHit != stats {
+		t.Errorf("stats changed after a cached (non-creating) request: %+v -> %+v", stats, statsAfterCacheHit)
+	}
+
+	// A dev-mode fixture player job must not be counted either.
+	devCfg := &config.Config{DevMode: true}
+	devH, _, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, devCfg)
+	devRouter := api.NewRouter(devH)
+	devReq := httptest.NewRequest(http.MethodGet, "/api/players/dev-ok/today", nil)
+	devRec := httptest.NewRecorder()
+	devRouter.ServeHTTP(devRec, devReq)
+	if devRec.Code != http.StatusOK {
+		t.Fatalf("dev-ok request status = %d, body = %s", devRec.Code, devRec.Body.String())
+	}
+
+	devStatsRec := httptest.NewRecorder()
+	devRouter.ServeHTTP(devStatsRec, statsReq)
+	var devStats api.RgxJobStatsResponse
+	if err := json.Unmarshal(devStatsRec.Body.Bytes(), &devStats); err != nil {
+		t.Fatalf("decode dev stats: %v", err)
+	}
+	if devStats != (api.RgxJobStatsResponse{}) {
+		t.Errorf("dev-mode job affected usage stats: %+v, want all zero", devStats)
 	}
 }

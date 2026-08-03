@@ -44,6 +44,9 @@ func TestParseDivisionSidebar(t *testing.T) {
 			if d.TeamsPath != "/tournaments/692-2026-07-18-2-leguan-cup/teams/2263" {
 				t.Errorf("division 2263 teams path: got %q", d.TeamsPath)
 			}
+			if d.TournamentID != "692" {
+				t.Errorf("division 2263 tournament id: got %q, want %q", d.TournamentID, "692")
+			}
 		}
 	}
 	if !found {

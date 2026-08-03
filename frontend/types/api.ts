@@ -75,3 +75,10 @@ export interface JobResponse {
   error?: string;
   finished_at?: string;
 }
+
+// GET /api/stats/rgx-jobs — all-time RgxJob usage counts.
+export interface RgxJobStats {
+  created: number;
+  succeeded: number;
+  failed: number;
+}

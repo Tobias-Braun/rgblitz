@@ -246,6 +246,30 @@ Proxies an image from the playerzone Azure CDN (`pstaassets.blob.core.windows.ne
 
 ---
 
+### `GET /api/stats/rgx-jobs`
+
+All-time usage counts of `RgxJob`s created via `GET /api/players/:id/today`. Backed by the permanent `rgx_jobs_stats` table (see `03-data-requirements.md §Usage Statistics`), which survives the daily `rgx_jobs` purge. Powers the frontend footer's all-time usage stat (`AppFooter.vue`).
+
+Counts only real, production-created jobs — cache hits (an in-flight or still-fresh job reused instead of creating a new one) and `DEV_MODE` synthetic jobs are never counted.
+
+**Response `200 OK`**
+
+```json
+{
+  "created": 4213,
+  "succeeded": 4029,
+  "failed": 184
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `created` | Total jobs ever created, regardless of current status (includes any still `queued`/`running`) |
+| `succeeded` | Jobs that reached `done` |
+| `failed` | Jobs that reached `error` |
+
+---
+
 ## Response Field Reference
 
 | Field | Type | Description |

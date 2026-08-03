@@ -18,6 +18,7 @@ func NewRouter(h *Handler) http.Handler {
 		r.Get("/players/{id}/today", h.TodayResult)
 		r.Get("/players/{id}/today/jobs/{jobId}", h.JobStatus)
 		r.Get("/images/proxy", h.ProxyImage)
+		r.Get("/stats/rgx-jobs", h.RgxJobStats)
 	})
 
 	// Simple health check.

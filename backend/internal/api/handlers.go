@@ -45,6 +45,7 @@ type Handler struct {
 	fetcher     scraper.Fetcher
 	permissions *db.PermissionStore
 	jobs        *db.JobStore
+	stats       *db.JobStatsStore
 	queue       *jobqueue.Queue
 
 	// Now returns the current time; defaults to time.Now. Overridable in tests so the
@@ -52,8 +53,8 @@ type Handler struct {
 	Now func() time.Time
 }
 
-func NewHandler(cfg *config.Config, ps *db.PlayerStore, c *cache.Cache, fetcher scraper.Fetcher, permissions *db.PermissionStore, jobs *db.JobStore, queue *jobqueue.Queue) *Handler {
-	return &Handler{cfg: cfg, players: ps, cache: c, fetcher: fetcher, permissions: permissions, jobs: jobs, queue: queue, Now: time.Now}
+func NewHandler(cfg *config.Config, ps *db.PlayerStore, c *cache.Cache, fetcher scraper.Fetcher, permissions *db.PermissionStore, jobs *db.JobStore, stats *db.JobStatsStore, queue *jobqueue.Queue) *Handler {
+	return &Handler{cfg: cfg, players: ps, cache: c, fetcher: fetcher, permissions: permissions, jobs: jobs, stats: stats, queue: queue, Now: time.Now}
 }
 
 // scrapePermitted reports whether live playerzone requests may be made.
@@ -263,6 +264,10 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+	if err := h.stats.Create(newJob.ID, playerID, now); err != nil {
+		// Non-fatal — usage stats are best-effort and must never block serving the job.
+		log.Printf("record job stats for job %d: %v", newJob.ID, err)
+	}
 	h.queue.Enqueue(newJob.ID)
 	jsonOK(w, h.jobResponse(newJob))
 }
@@ -290,6 +295,28 @@ func (h *Handler) JobStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, h.jobResponse(job))
+}
+
+// --- /api/stats/rgx-jobs ---
+
+// RgxJobStatsResponse is the all-time usage summary returned by GET /api/stats/rgx-jobs.
+type RgxJobStatsResponse struct {
+	Created   int `json:"created"`
+	Succeeded int `json:"succeeded"`
+	Failed    int `json:"failed"`
+}
+
+// RgxJobStats handles GET /api/stats/rgx-jobs — all-time counts of RgxJobs
+// created/succeeded/failed, backing the "Happily served N RGX changes"
+// header stat on the frontend.
+func (h *Handler) RgxJobStats(w http.ResponseWriter, r *http.Request) {
+	totals, err := h.stats.Totals()
+	if err != nil {
+		log.Printf("load job stats totals: %v", err)
+		jsonError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	jsonOK(w, RgxJobStatsResponse{Created: totals.Created, Succeeded: totals.Succeeded, Failed: totals.Failed})
 }
 
 // jobResponse builds the JobResponse for a job, decoding its stored result
