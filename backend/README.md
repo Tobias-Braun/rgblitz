@@ -92,7 +92,7 @@ A single-set game (`--won 1 --lost 0` or `--won 0 --lost 1`, no `2:x` result) au
 
 ## Manually verify the scraping pipeline
 
-`cmd/scrapecheck` dry-runs the *entire* scrape → RGX pipeline for one player — home page → active tournaments → divisions → division teams → team schedule → per-game RGX deltas — and prints every step as it happens. It never goes through the HTTP server.
+`cmd/scrapecheck` dry-runs the *entire* scrape → RGX pipeline for one player — home page → active tournaments → GRT classification → divisions → division teams → team schedule → per-game RGX deltas — and prints every step as it happens. It never goes through the HTTP server. Since GRT classification is cached permanently in the `tournaments` DB table (see the root `CLAUDE.md`), it opens a small SQLite file under the OS temp dir on each run — no `--db-path` flag needed, this is just a throwaway cache shared across repeated invocations.
 
 Step 1 fetches and merges both ranking tabs (Open + Women), same as the reindex job. Note that the RGX printed here is only the *indexed* value — a game's actual `r1`/`r2` and the player's own before/after RGX for the day always come live from the tournament's own pages (`ScrapeTodayResult`), since a woman playing an Open tournament uses her live Open RGX for that day even though her indexed value is her Women RGX.
 
@@ -212,7 +212,8 @@ GOOS=linux GOARCH=amd64 go build -o ../bin/rgblitz-server-linux ./cmd/server
 
 Tests run against the HTML fixtures in `../scraper/fixtures/` — no internet connection or running server required. This includes:
 
-- `internal/scraper`: parser correctness for every playerzone page type, the RGX formula (`ComputeDeltaBreakdown`/`MatchP`) across all outcome types including single-set games, division RGX caps, the `Fetcher` abstraction (fixture routing + a live-HTTP path against `httptest`), and robustness checks that every parser fails loudly (never panics) on malformed or empty HTML.
+- `internal/scraper`: parser correctness for every playerzone page type (including tournament detail pages, for GRT/non-GRT classification), the RGX formula (`ComputeDeltaBreakdown`/`MatchP`) across all outcome types including single-set games, division RGX caps, `resolveTournamentGRT`'s scrape-once/cache-forever behaviour, the `Fetcher` abstraction (fixture routing + a live-HTTP path against `httptest`), and robustness checks that every parser fails loudly (never panics) on malformed or empty HTML.
+- `internal/db`: `TournamentStore` CRUD (get-missing, create-then-get, idempotent create for an already-seen tournament ID).
 - `internal/api`: HTTP handler behaviour via `httptest` — search, the weekday/time-window guard (asserted with a fetcher that fails the test if the network is touched), dev mode, a full fixture-backed scrape with result caching, unknown players, and the image proxy's input validation.
 
 ```sh
@@ -247,10 +248,11 @@ internal/
   cache/    — thin in-memory TTL cache wrapper (go-cache)
   config/   — env-based config struct
   cron/     — weekly Saturday 03:00 CET player-index scrape + daily RgxJob cleanup
-  db/       — SQLite schema migration + player/job/permission CRUD
-  scraper/  — HTML parsers for each playerzone page type, the RGX formula, and the
-              Fetcher abstraction (HTTPFetcher for the live site, FixtureFetcher for
-              dev mode / tests / the scrapecheck CLI)
+  db/       — SQLite schema migration + player/job/tournament/permission CRUD
+  scraper/  — HTML parsers for each playerzone page type (including a tournament's own
+              detail page, for GRT classification), the RGX formula, and the Fetcher
+              abstraction (HTTPFetcher for the live site, FixtureFetcher for dev mode /
+              tests / the scrapecheck CLI)
 ```
 
 ---

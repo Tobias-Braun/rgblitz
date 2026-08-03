@@ -43,7 +43,7 @@ Triggered when the selected player has no tournament registered for today (compo
 **Layout**
 - Player chip remains visible at top
 - Centered message card:
-  > "Es sieht so aus, als würdest du heute kein Turnier spielen. Diese Seite funktioniert nur an Turnier-Tagen."
+  > "Es sieht so aus, als würdest du heute GRT kein Turnier spielen. Diese Seite funktioniert nur an Turnier-Tagen."
 - No data displayed below
 
 ---

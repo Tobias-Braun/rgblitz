@@ -52,9 +52,9 @@ defineEmits<{
         </svg>
       </div>
       <p class="message">
-        Es sieht so aus, als würdest du heute kein Turnier spielen. Diese Seite
-        funktioniert nur an Turnier-Tagen. Turniere werden erst registriert,
-        wenn die Divisionen veröffentlicht worden sind.
+        Es sieht so aus, als würdest du heute kein GRT Turnier spielen. Diese
+        Seite funktioniert nur an Turnier-Tagen. Turniere werden erst
+        registriert, wenn die Divisionen veröffentlicht worden sind.
       </p>
       <p class="hint">Turniere sind nur Sa &amp; So.</p>
     </div>

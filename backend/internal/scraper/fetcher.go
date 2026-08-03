@@ -116,6 +116,8 @@ func fixtureFileForPath(path string) (string, error) {
 		return "team-schedule.html", nil
 	case strings.Contains(path, "/teams/"):
 		return "division-teams.html", nil
+	case strings.HasPrefix(path, "/tournaments/"):
+		return "tournament-detail.html", nil
 	default:
 		return "", fmt.Errorf("no fixture mapped for path %q", path)
 	}

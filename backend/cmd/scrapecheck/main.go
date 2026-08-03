@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -85,8 +86,22 @@ func main() {
 	}
 	fmt.Printf("  matched: %s (id=%s, club=%s, rgx=%d)\n\n", player.Name, player.ID, player.ClubName, player.RGX)
 
+	// The tournaments table only needs to persist across runs so repeated checks against
+	// the same tournament don't re-fetch its detail page — an ephemeral file in the OS
+	// temp dir is enough, no --db-path flag needed for a dry-run tool.
+	tournamentsConn, err := db.Open(filepath.Join(os.TempDir(), "rgblitz-scrapecheck.db"))
+	if err != nil {
+		fatalf("open scrapecheck db: %v", err)
+	}
+	defer tournamentsConn.Close()
+
 	fmt.Println("step 2/2: running the scrape+RGX pipeline (profile → schedule → division sidebar → division teams) ...")
-	deps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: cache.New(), ProxyURL: func(s string) string { return s }}
+	deps := scraper.ScrapeDeps{
+		Fetcher:     fetcher,
+		Cache:       cache.New(),
+		ProxyURL:    func(s string) string { return s },
+		Tournaments: db.NewTournamentStore(tournamentsConn),
+	}
 	resp, tournamentID, err := scraper.ScrapePlayerToday(deps, player, now)
 	if err != nil {
 		fatalf("pipeline error: %v", err)

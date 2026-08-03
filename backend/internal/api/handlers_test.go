@@ -99,9 +99,10 @@ func newTestHandler(t *testing.T, fetcher scraper.Fetcher, cfg *config.Config) (
 	permissions := db.NewPermissionStore(conn)
 	jobs := db.NewJobStore(conn)
 	jobStats := db.NewJobStatsStore(conn)
+	tournaments := db.NewTournamentStore(conn)
 
 	c := cache.New()
-	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: c, ProxyURL: api.ProxyURL}
+	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: c, ProxyURL: api.ProxyURL, Tournaments: tournaments}
 	queue := jobqueue.New(jobs, jobStats, store, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
 	queue.Start()
 

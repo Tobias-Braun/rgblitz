@@ -39,16 +39,19 @@ type TodayResult struct {
 // the HTTP handler (dev-mode short-circuits aside) and the background job
 // worker (internal/jobqueue).
 type ScrapeDeps struct {
-	Fetcher  Fetcher
-	Cache    *cache.Cache
-	ProxyURL func(string) string
+	Fetcher     Fetcher
+	Cache       *cache.Cache
+	ProxyURL    func(string) string
+	Tournaments *db.TournamentStore
 }
 
 // ScrapePlayerToday runs the full scrape pipeline (player profile → today's
-// team → schedule → division sidebar → division teams → RGX deltas) for one
-// player, always attempting the scrape regardless of the current
-// weekday/time window. Callers are responsible for the weekday/time-window
-// guard and any result caching.
+// team → schedule → division sidebar → GRT classification → division teams →
+// RGX deltas) for one player, always attempting the scrape regardless of the
+// current weekday/time window. Callers are responsible for the weekday/time-window
+// guard and any result caching. A tournament that isn't part of the German
+// Roundnet Tour (e.g. EURA-rated ones) never produces RGX changes and is
+// reported the same as no tournament today — see resolveTournamentGRT.
 //
 // The second return value is the numeric playerzone tournament ID the result
 // was computed from (0 if the player has no tournament today) — used by the
@@ -104,6 +107,16 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 	}
 	if teamsPath == "" {
 		return TodayResult{}, 0, fmt.Errorf("division %q not found in schedule page sidebar", schedule.DivisionName)
+	}
+
+	isGRT, err := resolveTournamentGRT(deps, tournamentID, now)
+	if err != nil {
+		return TodayResult{}, 0, fmt.Errorf("resolve tournament GRT status: %w", err)
+	}
+	if !isGRT {
+		// Non-GRT tournaments (e.g. EURA-rated ones) never produce RGX changes —
+		// treated exactly like no tournament today.
+		return TodayResult{Status: "no_tournament", Player: pInfo}, tournamentID, nil
 	}
 
 	divisionTeams, err := fetchDivisionTeamsByPath(deps, teamsPath)
@@ -229,6 +242,44 @@ func fetchTeamScheduleAndSidebar(deps ScrapeDeps, teamID int) (TeamScheduleResul
 		return TeamScheduleResult{}, nil, err
 	}
 	return schedule, sidebar, nil
+}
+
+// resolveTournamentGRT reports whether tournamentID is a German Roundnet Tour
+// tournament, consulting the permanent tournaments table first and falling back to
+// scraping the tournament's own detail page only the first time it's ever seen — GRT
+// status is assumed fixed for good once a tournament has started, so nothing here
+// needs a TTL or re-fetch path.
+func resolveTournamentGRT(deps ScrapeDeps, tournamentID int, now time.Time) (bool, error) {
+	existing, err := deps.Tournaments.Get(tournamentID)
+	if err != nil {
+		return false, fmt.Errorf("load tournament %d: %w", tournamentID, err)
+	}
+	if existing != nil {
+		return existing.IsGRT, nil
+	}
+
+	body, err := deps.Fetcher.Fetch(fmt.Sprintf("/tournaments/%d", tournamentID))
+	if err != nil {
+		return false, fmt.Errorf("fetch tournament %d: %w", tournamentID, err)
+	}
+	defer body.Close()
+
+	detail, err := ParseTournamentDetail(body)
+	if err != nil {
+		return false, fmt.Errorf("parse tournament %d: %w", tournamentID, err)
+	}
+
+	if err := deps.Tournaments.Create(db.Tournament{
+		ID:        tournamentID,
+		Name:      detail.Name,
+		IsGRT:     detail.IsGRT,
+		Date:      detail.Date,
+		ScrapedAt: now,
+	}); err != nil {
+		return false, fmt.Errorf("save tournament %d: %w", tournamentID, err)
+	}
+
+	return detail.IsGRT, nil
 }
 
 func fetchDivisionTeamsByPath(deps ScrapeDeps, teamsPath string) ([]TeamEntry, error) {

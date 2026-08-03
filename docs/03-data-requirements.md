@@ -121,6 +121,39 @@ In the real playerzone system, new players go through a pre-calculation round th
 
 ---
 
+## Tournament Classification (GRT vs. non-GRT)
+
+Not every tournament on playerzone is a **German Roundnet Tour (GRT)** tournament —
+other national bodies (e.g. **EURA**) run tournaments on the same platform, and those
+must never produce RGX changes. A tournament's own detail page
+(`/tournaments/{id}-{slug}`) states this directly: GRT tournaments render a
+"German Roundnet Tour {year}" label next to the GRT logo; non-GRT tournaments don't.
+
+A permanent table, `tournaments`, records this classification the first time a
+tournament is resolved (never purged, unlike `rgx_jobs` — see §Usage Statistics for
+the analogous rationale):
+
+| Field | Meaning |
+|-------|---------|
+| `id` | Numeric playerzone tournament ID |
+| `name` | Tournament name (`h3.kf-title` on the detail page) |
+| `is_grt` | Whether the tournament counts towards the German Roundnet Tour |
+| `date` | First day of the tournament, `YYYY-MM-DD` |
+| `scraped_at` | When this row was first written |
+
+**Write rules**:
+
+- Looked up by tournament ID as soon as `ScrapePlayerToday` resolves which tournament
+  the player is registered in today (`internal/scraper/orchestrate.go`).
+- If no row exists yet, `GET /tournaments/{id}` (playerzone redirects the numeric-only
+  path to the full slug URL) is scraped once and the result inserted.
+- **Never re-scraped or updated once inserted** — a tournament's GRT status is assumed
+  fixed for good once the tournament has started, so there is no TTL and no refresh path.
+- A non-GRT tournament produces `{status: "no_tournament"}` — identical to the player
+  having no tournament at all today. No RGX deltas are computed for it.
+
+---
+
 ## Caching Strategy
 
 ### Player Index (master data)
@@ -151,6 +184,8 @@ Tournaments run on a **single calendar day**, typically **08:00–20:00 CET**.
 | Weekend, no tournament found for player today | Cache negative result for **15 minutes** to avoid hammering playerzone |
 
 **"Tournament active today" check**: Before scraping match data, check whether there is a tournament scheduled for today on playerzone. This avoids unnecessary scraping on non-tournament days.
+
+**GRT check**: Once a tournament is found for today, its GRT classification is also checked (see §Tournament Classification) — a non-GRT tournament (e.g. EURA-rated) is treated the same as no tournament at all.
 
 ---
 

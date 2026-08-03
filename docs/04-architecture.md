@@ -90,10 +90,11 @@ internal/
   scraper/        # playerzone HTML scrapers + scrape orchestration
     player.go     # scrapes player list + profile pages
     tournament.go # parses a team schedule page into per-game RGX deltas
+    tournament_detail.go # parses a tournament's own detail page for its name/date/GRT status
     orchestrate.go # ScrapePlayerToday — the full home→tournament→division→schedule hop, run off the request path
   jobqueue/       # single-worker queue draining RgxJob rows through the shared rate limiter
   cache/          # in-memory TTL cache for tournament results + images
-  db/             # database access layer (player index, RgxJob store, permanent RgxJob usage-stats store, permission store)
+  db/             # database access layer (player index, RgxJob store, permanent RgxJob usage-stats store, permanent tournament classification store, permission store)
   cron/           # weekly player-index scrape + daily RgxJob cleanup scheduler
   config/         # env-based config (port, DB path, scrape interval, etc.)
 ```
@@ -131,8 +132,11 @@ internal/
       background jobqueue.Queue, return {job_id, status: "queued", queue_position}
 9. The single jobqueue worker (FIFO, serialized through the existing
    playerzone rate limiter) picks up the job: marks it "running", runs the
-   full home→tournament→division→schedule scrape, computes RGX deltas, and
-   marks the job "done" (with the result) or "error"
+   full home→tournament→division→schedule scrape, classifies the tournament
+   as GRT or not (scraping its detail page once, then caching the result
+   permanently — see `05-scraping-algorithm.md §ResolveTournamentGRT`; a
+   non-GRT tournament short-circuits to `{status: "no_tournament"}` here),
+   computes RGX deltas, and marks the job "done" (with the result) or "error"
 10. ResultView polls GET /api/players/{id}/today/jobs/{jobId} every 2s,
     showing the queue position (as a German status phrase) until the job
     reaches "done" or "error"

@@ -75,6 +75,17 @@ func migrate(db *sql.DB) error {
 			finished_at    DATETIME
 		);
 		CREATE INDEX IF NOT EXISTS idx_rgx_jobs_stats_status ON rgx_jobs_stats(status);
+
+		-- tournaments is a permanent classification cache, never purged: once a
+		-- tournament has started, its GRT status is assumed fixed forever, so it only
+		-- ever needs to be scraped once (see internal/scraper.ScrapePlayerToday).
+		CREATE TABLE IF NOT EXISTS tournaments (
+			id         INTEGER PRIMARY KEY,
+			name       TEXT NOT NULL,
+			is_grt     BOOLEAN NOT NULL,
+			date       TEXT NOT NULL,
+			scraped_at DATETIME NOT NULL
+		);
 	`)
 	return err
 }

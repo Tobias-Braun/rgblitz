@@ -7,6 +7,7 @@
 | Player profile | `https://playerzone.roundnetgermany.de/players/{numeric_id}` | No | List every tournament a player has played, each with its tournament-scoped team ID |
 | Upcoming | `https://playerzone.roundnetgermany.de/tournaments/upcoming` | No | List future tournaments (not yet started) |
 | Ranking | `https://playerzone.roundnetgermany.de/ranking/rg-index/` | No | Full player list with individual RGX |
+| Tournament detail | `/tournaments/{id}-{slug}` (numeric-only `/tournaments/{id}` redirects here) | No | Tournament name, first day's date, and whether it counts towards the German Roundnet Tour (GRT) |
 | Division teams | `/tournaments/{id}-{slug}/teams/{div_id}` | No | All teams in a division with combined RGX + player names |
 | Team schedule | `/tournaments/schedule/team/{team_id}` | No | A single team's games (scores, round, opponents) + a sidebar listing every division in that tournament (name + teams-page link) |
 | Game info | `/tournaments/game-info/{game_id}` | **Yes** | Per-game detail — **behind login, out of scope** |
@@ -138,6 +139,12 @@ FUNCTION GetTodayResult(player_id):
   4. found_division = sidebar entry WHERE name equals TeamSchedule.division_name
      (case-insensitive)
      IF found_division == nil: fail loudly — DOM/parse mismatch, not "no tournament"
+     tournament_id = found_division.tournament_id (parsed alongside the teams-page link)
+
+  4.5. is_grt = ResolveTournamentGRT(tournament_id)
+       IF is_grt == false: return {status: "no_tournament"}
+       # Not a German Roundnet Tour tournament (e.g. EURA-rated) — never produces RGX
+       # changes, so it's reported exactly like the player having no tournament today.
 
   5. pre_r1 = ResolveTeamRGX(team_players, found_division.name)
      # See ResolvePlayerRGX below — handles new players with no score
@@ -218,6 +225,44 @@ The `has_proxy` flag on **any** game in a day's results causes the frontend to d
 
 ---
 
+### ResolveTournamentGRT — classifying a tournament once, forever
+
+Not every tournament on playerzone counts towards German RGX: national bodies other
+than the German Roundnet Tour (e.g. EURA) run their own tournaments on the same
+platform, and those must never produce RGX changes. A tournament's detail page
+carries this classification directly.
+
+```
+FUNCTION ResolveTournamentGRT(tournament_id) → is_grt bool:
+
+  row = DB.tournaments.Get(tournament_id)
+  IF row != nil:
+    return row.is_grt
+    # Already classified — a tournament's GRT status is assumed fixed for good once
+    # it has started, so a tournament is never re-scraped after its first lookup.
+
+  GET /tournaments/{tournament_id}
+  # playerzone 302-redirects the numeric-only path to the full /{id}-{slug} URL;
+  # no slug lookup needed.
+
+  name = h3.kf-title text
+  date = first date parsed from the "Date: <b>...</b>" field (first day, for
+         multi-day tournaments)
+  is_grt = page contains the text "German Roundnet Tour {year}"
+           (rendered next to the GRT logo on qualifying tournaments only)
+
+  DB.tournaments.Create({id: tournament_id, name, is_grt, date, scraped_at: now})
+  # INSERT ... ON CONFLICT(id) DO NOTHING — safe if another process already inserted
+  # this tournament between the Get above and this Create.
+
+  return is_grt
+```
+
+The `tournaments` table is permanent (never purged, unlike `rgx_jobs`) — see
+`03-data-requirements.md §Tournament Classification`.
+
+---
+
 ### Cancelled games
 
 playerzone renders a cancelled game (forfeit, injury, etc.) the same way it renders a
@@ -265,6 +310,7 @@ Result:
 | `players` DB table | Updated weekly | SQLite | All player master data |
 | `profile:{numeric_id}` | 60s | In-memory | Parsed tournament entries from a player's profile page |
 | `division_teams:{teams_path}` | 5 min | In-memory | Parsed team list for a division |
+| `tournaments` DB table | Permanent, never re-scraped | SQLite | Tournament id → name, GRT flag, first-day date |
 | `tournament_result:{player_id}:{date}` | 60s (active) / 24h (finished) | In-memory | Computed game results + delta |
 | image cache file, named from a sanitized original URL | 7 days | Disk (`./cache/images/`) | Proxied image bytes |
 
