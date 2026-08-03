@@ -15,7 +15,7 @@ jobs:
       packages: write
     strategy:
       matrix:
-        image: [backend, frontend]
+        image: [backend, frontend, caddy]
     steps:
       - name: Checkout
         uses: actions/checkout@v4

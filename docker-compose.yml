@@ -26,21 +26,23 @@ services:
       - com.centurylinklabs.watchtower.enable=true
 
   caddy:
-    image: caddy:2-alpine
+    image: ghcr.io/tobias-braun/rgblitz-caddy:${IMAGE_TAG:-latest}
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
-      - "3000:3000"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      - ./certs/origin-cert.pem:/etc/caddy/origin-cert.pem:ro
+      - ./certs/origin-key.pem:/etc/caddy/origin-key.pem:ro
     environment:
       DOMAIN: ${DOMAIN}
     depends_on:
       - backend
       - frontend
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
 
   watchtower:
     image: ghcr.io/nicholas-fedor/watchtower
