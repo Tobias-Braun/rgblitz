@@ -13,7 +13,9 @@
 
 ---
 
-## Master Data Scrape (weekly, Saturday 03:00 CET)
+## Master Data Scrape (Saturday and Sunday, 03:00 CET)
+
+Running on both tournament days (not just Saturday) means a Saturday tournament's RGX changes are picked up before a Sunday tournament computes its own deltas.
 
 ### Target
 `https://playerzone.roundnetgermany.de/ranking/rg-index/`

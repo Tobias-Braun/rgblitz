@@ -275,4 +275,4 @@ The frontend never blocks on `GET /api/players/:id/today` — it always returns 
 
 This is implemented client-side by the `useTodayResult.ts` Vue composable. SSR renders the initial (immediate) job-creation response; polling only runs after hydration.
 
-`RgxJob` rows (and their stored results) are purged daily by a cron job at 00:05 CET — polling a `job_id` from a previous day will 404.
+`RgxJob` rows (and their stored results) are purged daily by a cron job at 03:00 CET (same time as the player index scrape) — polling a `job_id` from a previous day will 404.

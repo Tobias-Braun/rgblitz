@@ -123,14 +123,14 @@ In the real playerzone system, new players go through a pre-calculation round th
 
 ## Caching Strategy
 
-### Weekly Player Index (master data)
+### Player Index (master data)
 
-- **Schedule**: Every **Saturday at 03:00 CET** (cron job in Go backend, `internal/cron/jobs.go`) — comfortably before any Saturday tournament's first match, so RGX values are a valid pre-tournament baseline for the whole weekend
+- **Schedule**: Every **Saturday and Sunday at 03:00 CET** (cron job in Go backend, `internal/cron/jobs.go`) — comfortably before either day's first match, and running on both days means a Saturday tournament's RGX changes are picked up before a Sunday tournament computes its own deltas
 - **Startup fallback**: Also runs once at process startup if the `players` table has fewer than 1000 rows, so a fresh deployment doesn't wait up to a week for a usable autocomplete (`cmd/server/main.go`)
 - **What**: Scrape full player list from playerzone — all active players with name, ID, avatar URL, club name, club logo URL
 - **Storage**: Local database table `players` (upsert by player ID)
 - **Purpose**: Powers the autocomplete; no live playerzone request per search keystroke
-- **Staleness tolerance**: Up to 7 days old is acceptable
+- **Staleness tolerance**: Up to a few days old is acceptable
 
 ### Tournament Data (daily, on-demand)
 

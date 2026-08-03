@@ -31,23 +31,27 @@ func NewScheduler(ps *db.PlayerStore, jobs *db.JobStore, fetcher scraper.Fetcher
 	return &Scheduler{c: c, players: ps, jobs: jobs, fetcher: fetcher, permissions: permissions, respectPermission: respectPermission}
 }
 
-// Start registers the weekly player index scrape, the daily RgxJob cleanup,
-// and starts the cron runner.
-// Saturday 03:00 CET: "0 3 * * 6"
-// Every day 00:05 CET: "5 0 * * *" — purges rgx_jobs (see docs job-queue design)
+// Start registers the player index scrape, the daily RgxJob cleanup, and
+// starts the cron runner.
+// Saturday and Sunday 03:00 CET: "0 3 * * 6,0" — scraping runs on both
+// tournament days (not just Saturday) so that RGX changes from a Saturday
+// tournament are picked up before a Sunday tournament computes its deltas.
+// Every day 03:00 CET: "0 3 * * *" — purges rgx_jobs (see docs job-queue
+// design); aligned with the scrape time so both daily maintenance jobs run
+// together.
 func (s *Scheduler) Start() {
-	_, err := s.c.AddFunc("0 3 * * 6", func() {
-		log.Println("cron: starting weekly player index scrape")
+	_, err := s.c.AddFunc("0 3 * * 6,0", func() {
+		log.Println("cron: starting player index scrape")
 		if err := s.scrapePlayerIndex(); err != nil {
-			log.Printf("cron: weekly scrape failed: %v", err)
+			log.Printf("cron: scrape failed: %v", err)
 		}
 	})
 	if err != nil {
-		log.Printf("cron: failed to register weekly scrape job: %v", err)
+		log.Printf("cron: failed to register scrape job: %v", err)
 		return
 	}
 
-	_, err = s.c.AddFunc("5 0 * * *", func() {
+	_, err = s.c.AddFunc("0 3 * * *", func() {
 		if err := s.jobs.DeleteAll(); err != nil {
 			log.Printf("cron: rgx_jobs cleanup failed: %v", err)
 			return
@@ -60,7 +64,7 @@ func (s *Scheduler) Start() {
 	}
 
 	s.c.Start()
-	log.Println("cron: scheduler started (weekly scrape every Saturday 03:00 CET, daily rgx_jobs cleanup at 00:05 CET)")
+	log.Println("cron: scheduler started (player index scrape every Saturday and Sunday 03:00 CET, daily rgx_jobs cleanup at 03:00 CET)")
 }
 
 func (s *Scheduler) Stop() {

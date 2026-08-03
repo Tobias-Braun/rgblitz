@@ -177,7 +177,7 @@ async function focusInput() {
         <div class="empty">
           <p class="empty-title">Kein:e Spieler:in gefunden</p>
           <p class="empty-sub">
-            Der Index wird jeden Freitag um 22:00 aktualisiert.
+            Der Index wird samstags und sonntags um 03:00 aktualisiert.
           </p>
         </div>
       </template>

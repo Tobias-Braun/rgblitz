@@ -137,10 +137,10 @@ internal/
 
 ---
 
-## Data Flow: Weekly Player Index Scrape
+## Data Flow: Player Index Scrape
 
 ```
-1. Cron fires Saturday 03:00 CET (or once at startup if the players table has < 1000 rows)
+1. Cron fires Saturday and Sunday 03:00 CET (or once at startup if the players table has < 1000 rows)
 2. PlayerScraper fetches playerzone player list / ranking page(s)
 3. For each player: parse id, name, avatar_url, club_name, club_logo_url, current_rgx
 4. Upsert into SQLite players table

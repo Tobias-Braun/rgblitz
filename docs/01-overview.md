@@ -46,10 +46,10 @@ Roundnet Germany runs its own player portal at **playerzone.roundnetgermany.de**
 - All tournament and player data originates from `playerzone.roundnetgermany.de` via HTML scraping — there is no official API
 - The app stores nothing beyond what is already publicly visible on playerzone (player names, club affiliation, RGX, avatar/logo images)
 - Tournaments run on a single calendar day, roughly 08:00–20:00 CET
-- The player index (used for autocomplete) is refreshed automatically once a week; searches never trigger a live playerzone request
+- The player index (used for autocomplete) is refreshed automatically twice a week; searches never trigger a live playerzone request
 
 ## Domain Assumptions
 
 - **Tournaments only occur on weekends (Saturday and Sunday).** There are no weekday tournaments — this is a hard domain rule with no known exceptions. Any request arriving on a weekday can immediately return `{status: "no_tournament"}` without contacting playerzone.
-- The weekly player-index scrape runs **Saturday 03:00 CET** (see `internal/cron/jobs.go`) — early enough that it's done well before any Saturday tournament's matches start, so the scraped RGX values are a valid pre-tournament baseline for both days of the weekend.
+- The player-index scrape runs **Saturday and Sunday 03:00 CET** (see `internal/cron/jobs.go`) — early enough that it's done well before either day's matches start. Running on both days (not just Saturday) means a Saturday tournament's RGX changes are picked up before a Sunday tournament computes its own deltas, rather than using stale Friday-night values for both days.
 - The backend also runs this same index scrape once at startup if the `players` table has fewer than 1000 rows, so a fresh deployment isn't stuck with an empty autocomplete for up to a week (see `cmd/server/main.go`).
