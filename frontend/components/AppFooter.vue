@@ -3,8 +3,8 @@
 <template>
   <footer class="app-footer">
     <NuxtLink to="/faq" class="footer-link">FAQ</NuxtLink>
-    <a href="#" class="footer-link">Datenschutz</a>
-    <a href="#" class="footer-link">Impressum</a>
+    <NuxtLink to="/datenschutz" class="footer-link">Datenschutz</NuxtLink>
+    <NuxtLink to="/impressum" class="footer-link">Impressum</NuxtLink>
   </footer>
 </template>
 
