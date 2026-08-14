@@ -96,17 +96,15 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		return TodayResult{}, 0, fmt.Errorf("fetch team schedule: %w", err)
 	}
 
-	var teamsPath string
-	var tournamentID int
-	for _, d := range sidebar {
-		if strings.EqualFold(d.Name, schedule.DivisionName) {
-			teamsPath = d.TeamsPath
-			tournamentID, _ = strconv.Atoi(d.TournamentID)
-			break
-		}
-	}
-	if teamsPath == "" {
-		return TodayResult{}, 0, fmt.Errorf("division %q not found in schedule page sidebar", schedule.DivisionName)
+	// TournamentID is shared by every division in the sidebar (it comes from the
+	// tournament-scoped URL segment, not the division-scoped one), so it can be
+	// read off any entry — no need to first find the division that matches
+	// schedule.DivisionName. This lets GRT status be resolved before requiring a
+	// successful division-name match, which only actually matters once we know
+	// the tournament is GRT (see below).
+	tournamentID, err := strconv.Atoi(sidebar[0].TournamentID)
+	if err != nil {
+		return TodayResult{}, 0, fmt.Errorf("parse tournament ID from schedule page sidebar: %w", err)
 	}
 
 	isGRT, err := resolveTournamentGRT(deps, tournamentID, now)
@@ -115,8 +113,21 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 	}
 	if !isGRT {
 		// Non-GRT tournaments (e.g. EURA-rated ones) never produce RGX changes —
-		// treated exactly like no tournament today.
+		// treated exactly like no tournament today. Resolved before the
+		// division-name match below since it isn't needed for this branch, so a
+		// non-GRT tournament degrades gracefully even if that match would fail.
 		return TodayResult{Status: "no_tournament", Player: pInfo}, tournamentID, nil
+	}
+
+	var teamsPath string
+	for _, d := range sidebar {
+		if strings.EqualFold(d.Name, schedule.DivisionName) {
+			teamsPath = d.TeamsPath
+			break
+		}
+	}
+	if teamsPath == "" {
+		return TodayResult{}, 0, fmt.Errorf("division %q not found in schedule page sidebar", schedule.DivisionName)
 	}
 
 	divisionTeams, err := fetchDivisionTeamsByPath(deps, teamsPath)

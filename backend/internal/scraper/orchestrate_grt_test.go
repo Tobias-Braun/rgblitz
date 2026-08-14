@@ -4,9 +4,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
 )
 
@@ -100,5 +102,66 @@ func TestResolveTournamentGRT_CachesAfterFirstScrape(t *testing.T) {
 	}
 	if fetcher.calls != 1 {
 		t.Errorf("fetch calls after second resolve = %d, want still 1 (should be served from the DB)", fetcher.calls)
+	}
+}
+
+// nonGRTDetailFetcher serves the same fixture set as FixtureFetcher, except every
+// tournament *detail* page (matched the same way FixtureFetcher's own routing does: not
+// the schedule or teams shape) is swapped for the non-GRT fixture, and any request for a
+// division's teams page fails the test outright.
+type nonGRTDetailFetcher struct {
+	t    *testing.T
+	dir  string
+	base *FixtureFetcher
+}
+
+func (f *nonGRTDetailFetcher) Fetch(path string) (io.ReadCloser, error) {
+	if strings.Contains(path, "/teams/") {
+		f.t.Fatalf("division teams page fetched for a non-GRT tournament: %q", path)
+	}
+	if strings.HasPrefix(path, "/tournaments/") && !strings.HasPrefix(path, "/tournaments/schedule/team/") {
+		return os.Open(filepath.Join(f.dir, "tournament-detail-non-grt.html"))
+	}
+	return f.base.Fetch(path)
+}
+
+// TestScrapePlayerToday_NonGRTTournament_SkipsDivisionMatchAndTeamsFetch proves the
+// GRT-before-division-match ordering in ScrapePlayerToday: resolving GRT status only needs
+// the tournament ID (shared by every division in the sidebar), not a successful
+// schedule-page-DivisionName-to-sidebar-Name match. So for a non-GRT tournament, the
+// pipeline must resolve to "no_tournament" using only the tournament ID from the sidebar,
+// without ever needing (or fetching) the division's teams page — exercising exactly the
+// path that a real ETS/EURA tournament takes, end to end through ScrapePlayerToday rather
+// than just the resolveTournamentGRT unit in isolation.
+func TestScrapePlayerToday_NonGRTTournament_SkipsDivisionMatchAndTeamsFetch(t *testing.T) {
+	fixtureDir := "../../../scraper/fixtures"
+	fetcher := &nonGRTDetailFetcher{t: t, dir: fixtureDir, base: NewFixtureFetcher(fixtureDir)}
+	deps := ScrapeDeps{
+		Fetcher:     fetcher,
+		Cache:       cache.New(),
+		ProxyURL:    func(u string) string { return u },
+		Tournaments: newTournamentTestStore(t),
+	}
+
+	player := &db.Player{ID: "LUC2110", Name: "Lucas Christiani", RGX: 1400}
+	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC) // the day the fixtures were captured on
+
+	result, tournamentID, err := ScrapePlayerToday(deps, player, now)
+	if err != nil {
+		t.Fatalf("ScrapePlayerToday: %v", err)
+	}
+	if result.Status != "no_tournament" {
+		t.Errorf("status = %q, want %q for a non-GRT tournament", result.Status, "no_tournament")
+	}
+	if tournamentID == 0 {
+		t.Error("tournamentID = 0, want the sidebar's tournament ID even though the tournament is non-GRT")
+	}
+
+	stored, err := deps.Tournaments.Get(tournamentID)
+	if err != nil {
+		t.Fatalf("get stored tournament: %v", err)
+	}
+	if stored == nil || stored.IsGRT {
+		t.Errorf("stored tournament = %+v, want a permanently cached non-GRT row", stored)
 	}
 }

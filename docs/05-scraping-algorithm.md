@@ -136,17 +136,26 @@ FUNCTION GetTodayResult(player_id):
           display name (div.sub-section .sub-title) and teams-page path
           (div.sub-section .big-title a[href])
 
-  4. found_division = sidebar entry WHERE name equals TeamSchedule.division_name
+  4. tournament_id = sidebar[0].tournament_id
+     # Every division in the sidebar shares the same tournament_id (it comes from the
+     # tournament-scoped URL segment, not the division-scoped one) — so it can be read
+     # off any sidebar entry, without first finding the one matching
+     # TeamSchedule.division_name. That match is deferred to step 5.5, since it's only
+     # actually needed once we know the tournament is GRT.
+
+     is_grt = ResolveTournamentGRT(tournament_id)
+     IF is_grt == false: return {status: "no_tournament"}
+     # Not a German Roundnet Tour tournament (e.g. EURA-rated) — never produces RGX
+     # changes, so it's reported exactly like the player having no tournament today.
+     # Resolved before the division-name match below, so a non-GRT tournament degrades
+     # gracefully to "no_tournament" even if that match would otherwise fail.
+
+  5. found_division = sidebar entry WHERE name equals TeamSchedule.division_name
      (case-insensitive)
      IF found_division == nil: fail loudly — DOM/parse mismatch, not "no tournament"
-     tournament_id = found_division.tournament_id (parsed alongside the teams-page link)
+     # Only reached for GRT tournaments — found_division.teams_path is needed below.
 
-  4.5. is_grt = ResolveTournamentGRT(tournament_id)
-       IF is_grt == false: return {status: "no_tournament"}
-       # Not a German Roundnet Tour tournament (e.g. EURA-rated) — never produces RGX
-       # changes, so it's reported exactly like the player having no tournament today.
-
-  5. pre_r1 = ResolveTeamRGX(team_players, found_division.name)
+  5.5. pre_r1 = ResolveTeamRGX(team_players, found_division.name)
      # See ResolvePlayerRGX below — handles new players with no score
 
   6. division_teams = GET found_division.teams_path (cached 5min per teams_path)
