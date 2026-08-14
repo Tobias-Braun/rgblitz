@@ -2,7 +2,7 @@
 <script setup lang="ts"></script>
 
 <template>
-  <div class="app-header">
+  <header class="app-header">
     <div class="logo-tile">
       <div class="bolt" />
     </div>
@@ -11,7 +11,7 @@
       <span class="blitz">BLITZ</span>
     </div>
     <span class="alpha">ALPHA</span>
-  </div>
+  </header>
 </template>
 
 <style scoped>
@@ -19,7 +19,7 @@
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 10px 18px;
+  padding: 10px max(18px, calc((100% - var(--page-container-max-width)) / 2));
   flex: none;
   border-bottom: 1px solid var(--border);
 }

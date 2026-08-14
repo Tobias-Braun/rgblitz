@@ -1,9 +1,9 @@
 <script setup lang="ts"></script>
 
 <template>
-  <main class="page">
+  <div class="page">
     <AppHeader />
-    <div class="content">
+    <main class="content">
       <NuxtLink to="/" class="back-link">← Zurück</NuxtLink>
       <h1 class="title">Impressum</h1>
 
@@ -82,18 +82,17 @@
           genannte E-Mail-Adresse an mich wenden.
         </p>
       </section>
-    </div>
-  </main>
+    </main>
+  </div>
 </template>
 
 <style scoped>
 .page {
   flex: 1;
   min-height: 0;
-  width: min(100%, var(--page-container-max-width));
+  width: 100%;
   display: flex;
   flex-direction: column;
-  margin: 0 auto;
   overflow: hidden;
 }
 
@@ -104,6 +103,8 @@
   flex-direction: column;
   gap: 22px;
   padding: 24px 18px 32px;
+  padding-left: max(18px, calc((100% - var(--page-container-max-width)) / 2));
+  padding-right: max(18px, calc((100% - var(--page-container-max-width)) / 2));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }

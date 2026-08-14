@@ -449,7 +449,8 @@ async function focusInput() {
 .top-bar {
   position: relative;
   z-index: 1;
-  padding: 10px 16px 14px;
+  padding: 10px max(16px, calc((100% - var(--page-container-max-width)) / 2))
+    14px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -504,7 +505,7 @@ async function focusInput() {
   z-index: 1;
   flex: 1;
   overflow-y: auto;
-  padding: 6px 0;
+  padding: 6px max(0px, calc((100% - var(--page-container-max-width)) / 2));
 }
 
 .list {

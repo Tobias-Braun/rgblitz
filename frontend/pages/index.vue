@@ -56,13 +56,13 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
 </script>
 
 <template>
-  <main class="page">
+  <div class="page">
     <SearchBar v-if="!selectedPlayer" @select="selectPlayer" />
 
     <template v-else>
       <AppHeader />
       <PlayerChip :player="selectedPlayer" detailed @close="searchAgain" />
-      <div class="content">
+      <main class="content">
         <ResultLoading
           v-if="pending && !data"
           :queue-position="queuePosition"
@@ -115,19 +115,18 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
           @retry="retry"
           @search-again="searchAgain"
         />
-      </div>
+      </main>
     </template>
-  </main>
+  </div>
 </template>
 
 <style scoped>
 .page {
   flex: 1;
   min-height: 0;
-  width: min(100%, var(--page-container-max-width));
+  width: 100%;
   display: flex;
   flex-direction: column;
-  margin: 0 auto;
   overflow: hidden;
 }
 
@@ -137,6 +136,8 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
   display: flex;
   flex-direction: column;
   padding-top: 24px;
+  padding-left: max(0px, calc((100% - var(--page-container-max-width)) / 2));
+  padding-right: max(0px, calc((100% - var(--page-container-max-width)) / 2));
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }

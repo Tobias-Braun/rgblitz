@@ -72,7 +72,8 @@ const clubLogoFailed = ref(false);
   align-items: center;
   gap: 11px;
   padding: 0 14px;
-  margin: 12px 16px 14px;
+  margin: 12px max(18px, calc((100% - var(--page-container-max-width)) / 2))
+    14px;
 }
 
 .avatar {
