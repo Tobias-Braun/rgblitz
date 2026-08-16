@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"runtime/debug"
 	"time"
 
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
@@ -58,7 +59,23 @@ func (q *Queue) run() {
 	}
 }
 
+// process runs one job end-to-end. A top-level recover guards the whole
+// function: an unrecovered panic anywhere in the scrape path (e.g. a parser
+// bug triggered by an unexpected page layout) would otherwise crash the
+// entire process, since Go terminates the whole program on an unrecovered
+// goroutine panic — not just this one. On restart, db.JobStore.ResetStuckRunning
+// would then re-enqueue the same job, which would panic again on the same
+// input, crash-looping the server indefinitely. Recovering here instead marks
+// the job as a normal, terminal "error" — it's never left in "running" state,
+// so it's never picked up by ResetStuckRunning and never retried.
 func (q *Queue) process(jobID int64) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("jobqueue: recovered panic processing job %d: %v\n%s", jobID, r, debug.Stack())
+			q.fail(jobID, fmt.Sprintf("internal error (panic): %v", r))
+		}
+	}()
+
 	job, err := q.jobs.GetByID(jobID)
 	if err != nil || job == nil {
 		log.Printf("jobqueue: load job %d: %v", jobID, err)

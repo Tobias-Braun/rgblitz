@@ -73,6 +73,19 @@ For the full technical breakdown — architecture, RGX formula, scraping algorit
 
 Backend-specific setup, environment variables, and CLI tools are documented in [`backend/README.md`](backend/README.md).
 
+### Scraping robustness policy
+
+playerzone is a third-party site with no API and no stability contract — its HTML can
+change shape at any time (a DOM tweak, or simply a page type the scraper hasn't seen
+before, like a non-GRT tournament rendering without an RGX badge). Every scraper in
+`internal/scraper` treats that HTML as untrusted input: unexpected, missing, or malformed
+structure must never panic the process, only ever return a clear `error` or fall back to
+a well-defined default. As defense in depth, every long-running goroutine that processes
+scraped data (the job-queue worker, cron jobs) also recovers from any panic that slips
+through anyway, turning it into a normal failure instead of crashing the server. See
+`internal/scraper/robustness_test.go` for the parser-level test pattern this policy
+expects new scrapers to follow.
+
 ### Running it locally
 
 **Backend:**

@@ -39,6 +39,39 @@ Every scrape (cron-triggered, startup-triggered, or via `Scheduler.ScrapeNow()`)
 - **RgxJob usage stats (`rgx_jobs_stats`) persist independently of `rgx_jobs`.** `rgx_jobs` is purged daily by cron; `rgx_jobs_stats` (`internal/db/stats.go`) is a separate, never-purged table recording one row per *genuinely created* job (never for a job reused from the dedup/freshness cache, and never for `DEV_MODE` synthetic jobs). `GET /api/stats/rgx-jobs` aggregates it for the frontend footer's all-time usage stat.
 - **Only GRT tournaments produce RGX changes.** Other national bodies (e.g. EURA) run tournaments on the same platform; a tournament's own detail page (`/tournaments/{id}-{slug}`) states whether it's GRT via a "German Roundnet Tour {year}" label. `internal/scraper.ScrapePlayerToday` resolves this once per tournament, permanently caching it in the never-purged `tournaments` table (`internal/db/tournaments.go`) — GRT status is assumed fixed forever once a tournament has started, so it's never re-scraped. A non-GRT tournament produces `{status: "no_tournament"}`, identical to no tournament at all.
 
+## Scraping robustness policy
+
+Every playerzone page is untrusted input. Treat the HTML as capable of changing at any
+moment — a DOM tweak, an A/B test, a tournament type that renders a different layout (see
+the non-GRT case below) — and never assume a selector, attribute, or text node will be
+present or non-empty just because it usually is.
+
+- **No unexpected page content may ever panic the process.** Indexing (`[0]`), a failed
+  type assertion, or any other operation that can panic on absent/malformed data must be
+  guarded. A parser encountering unexpected structure must return an `error` (see the
+  existing "fail loudly" pattern in `internal/scraper` and its `robustness_test.go`
+  suite — new parsing code should get a similar garbage/malformed/missing-field test) or,
+  where a sensible default exists, degrade gracefully (e.g. a missing RGX badge on a
+  player card is treated as "no RGX", which the existing new-player-proxy logic already
+  handles — see `firstField` in `internal/scraper/tournament.go`). Never let a raw
+  `slice[0]`, unchecked map/type assertion, or similar sit in a code path fed directly by
+  scraped HTML.
+- **Recover at every goroutine boundary that processes scraped data, as defense in
+  depth.** An unrecovered panic in any goroutine crashes the *entire* Go process (Go
+  offers no per-goroutine isolation), not just that unit of work. Both long-running
+  entry points that process untrusted playerzone data — `internal/jobqueue.Queue.process`
+  (one RGX job) and the cron jobs registered in `internal/cron.Scheduler.Start`
+  (`robfigcron.Recover` middleware) — recover from panics and convert them into a
+  normal, terminal failure (`db.JobStatusError` for jobs; a logged error for cron runs)
+  instead of taking down the server. Any new background worker that touches scraped data
+  needs the same guarantee.
+- **A recovered panic must never leave a job re-triable in a way that repeats itself.**
+  `db.JobStore.ResetStuckRunning` only re-enqueues jobs still in `"running"` state after a
+  crash-recovery restart — so a job must reach a terminal state (`done` or `error`)
+  before the goroutine handling it returns, panic or not. This is what stops a
+  reproducible bad-input panic from crash-looping the server (or, pre-recover, from
+  poisoning the queue) on every retry against the same input.
+
 ## RGX formula (implement exactly)
 
 ```

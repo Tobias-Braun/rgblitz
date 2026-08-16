@@ -96,6 +96,14 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		return TodayResult{}, 0, fmt.Errorf("fetch team schedule: %w", err)
 	}
 
+	// ParseDivisionSidebar already guarantees len(sidebar) >= 1 whenever it
+	// returns a nil error, but sidebar[0] is indexed here on parsed HTML output
+	// regardless — re-check explicitly rather than relying on that invariant
+	// holding across future changes to the parser.
+	if len(sidebar) == 0 {
+		return TodayResult{}, 0, fmt.Errorf("schedule page sidebar parsed 0 divisions")
+	}
+
 	// TournamentID is shared by every division in the sidebar (it comes from the
 	// tournament-scoped URL segment, not the division-scoped one), so it can be
 	// read off any entry — no need to first find the division that matches
@@ -205,7 +213,12 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 func fetchProfileEntries(deps ScrapeDeps, numericID string) ([]ProfileTournamentEntry, error) {
 	cacheKey := "profile:" + numericID
 	if cached, ok := deps.Cache.Get(cacheKey); ok {
-		return cached.([]ProfileTournamentEntry), nil
+		if entries, ok := cached.([]ProfileTournamentEntry); ok {
+			return entries, nil
+		}
+		// Wrong type under this key should never happen (this cache is only ever
+		// populated a few lines below), but a bad assertion must not panic —
+		// treat it as a cache miss and re-fetch rather than crash the caller.
 	}
 
 	body, err := deps.Fetcher.Fetch("/players/" + numericID)
@@ -296,7 +309,11 @@ func resolveTournamentGRT(deps ScrapeDeps, tournamentID int, now time.Time) (boo
 func fetchDivisionTeamsByPath(deps ScrapeDeps, teamsPath string) ([]TeamEntry, error) {
 	cacheKey := "division_teams:" + teamsPath
 	if cached, ok := deps.Cache.Get(cacheKey); ok {
-		return cached.([]TeamEntry), nil
+		if teams, ok := cached.([]TeamEntry); ok {
+			return teams, nil
+		}
+		// See the matching comment in fetchProfileEntries: treat a mismatched
+		// type as a cache miss rather than letting the assertion panic.
 	}
 
 	body, err := deps.Fetcher.Fetch(teamsPath)

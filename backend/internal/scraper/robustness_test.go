@@ -87,3 +87,29 @@ func TestParsers_MalformedHTMLDoesNotPanic(t *testing.T) {
 		_, _ = scraper.ParseTeamSchedule(strings.NewReader(malformed), 1)
 	})
 }
+
+// Non-GRT tournaments (e.g. EURA-rated ones) don't render an RGX badge on player
+// cards at all — unlike the malformed-HTML case above, the player card here is
+// otherwise well-formed (a real name, no truncation), it's specifically the
+// span.rgx-value element that's absent. This must not panic and must report rgx 0
+// for that player (which callers treat as "no RGX", falling back to a proxy value).
+const noRGXBadgeHTML = `<html><body>
+<div class="row section-title"><h3 class="event-title">Open</h3></div>
+<div class="second-title"><span><a>Our Team</a></span></div>
+<div class="player-card">
+	<div class="info-player-name"><a>Alex Example</a></div>
+</div>
+</body></html>`
+
+func TestParseTeamSchedule_PlayerCardWithoutRGXBadge(t *testing.T) {
+	result, err := scraper.ParseTeamSchedule(strings.NewReader(noRGXBadgeHTML), 1)
+	if err != nil {
+		t.Fatalf("ParseTeamSchedule: %v", err)
+	}
+	if len(result.Players) != 1 {
+		t.Fatalf("players = %d, want 1", len(result.Players))
+	}
+	if result.Players[0].RGX != 0 {
+		t.Errorf("RGX = %d, want 0 for a player card with no RGX badge", result.Players[0].RGX)
+	}
+}

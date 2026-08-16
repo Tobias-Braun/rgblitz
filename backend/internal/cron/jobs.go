@@ -27,7 +27,10 @@ type Scheduler struct {
 // persisted via permissions so it can also gate live API requests.
 func NewScheduler(ps *db.PlayerStore, jobs *db.JobStore, fetcher scraper.Fetcher, permissions *db.PermissionStore, respectPermission bool) *Scheduler {
 	loc, _ := time.LoadLocation("Europe/Berlin")
-	c := robfigcron.New(robfigcron.WithLocation(loc))
+	// Recover wraps every registered job: an unrecovered panic in a cron
+	// job's goroutine would otherwise crash the whole process, same as an
+	// unrecovered panic in the jobqueue worker (see internal/jobqueue.Queue.process).
+	c := robfigcron.New(robfigcron.WithLocation(loc), robfigcron.WithChain(robfigcron.Recover(robfigcron.DefaultLogger)))
 	return &Scheduler{c: c, players: ps, jobs: jobs, fetcher: fetcher, permissions: permissions, respectPermission: respectPermission}
 }
 

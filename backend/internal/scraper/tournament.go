@@ -198,8 +198,12 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 		if name == "" {
 			return
 		}
+		// Non-GRT tournaments (e.g. EURA-rated ones) don't render an RGX badge on
+		// player cards at all, since RGX doesn't apply to them — firstField
+		// returns "" rather than panicking, which strconv.Atoi below turns into
+		// rgx 0, and the caller's proxy-RGX fallback (spRGX <= 0) takes it from there.
 		rgxText := strings.TrimSpace(card.Find("span.rgx-value").First().Text())
-		rgxText = strings.Fields(rgxText)[0]
+		rgxText = firstField(rgxText)
 		rgx, _ := strconv.Atoi(strings.ReplaceAll(rgxText, ".", ""))
 		result.Players = append(result.Players, TeamPlayer{Name: name, RGX: rgx})
 	})
@@ -305,6 +309,17 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 	})
 
 	return result, nil
+}
+
+// firstField returns the first whitespace-separated token in s, or "" if s has
+// no tokens — a panic-safe replacement for strings.Fields(s)[0], which
+// indexes an empty slice (and panics) when s is blank.
+func firstField(s string) string {
+	fields := strings.Fields(s)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
 }
 
 // isByeName reports whether a team-slot name marks an automatic-advance row rather than

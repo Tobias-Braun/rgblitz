@@ -173,9 +173,11 @@ func ParseRankingPage(r io.Reader) ([]db.Player, error) {
 
 		clubLogoURL, _ := row.Find("td.player-col div.player-club-community img.club-img").Attr("src")
 
-		// rgx-value may contain a trailing trend indicator (e.g. "1963  ↙"); take the first token.
+		// rgx-value may contain a trailing trend indicator (e.g. "1963  ↙"); take the first
+		// token. firstField returns "" (rather than panicking, like strings.Fields(...)[0]
+		// would) if the cell has no RGX text at all.
 		rgxText := strings.TrimSpace(row.Find("td.rgx-col span.rgx-value").First().Text())
-		rgxText = strings.Fields(rgxText)[0]
+		rgxText = firstField(rgxText)
 		rgx, _ := strconv.Atoi(strings.ReplaceAll(rgxText, ".", "")) // DE locale uses . as thousands sep
 
 		gamesText := strings.TrimSpace(row.Find("td.games-col").First().Text())
