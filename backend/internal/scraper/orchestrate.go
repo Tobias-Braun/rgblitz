@@ -192,6 +192,7 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		}
 
 		gr := GameResultFromCard(g, r1, r2, opponentHasProxy)
+		gr.OurTeamName = schedule.TeamName
 		totalDelta += gr.RGXDelta
 		games = append(games, gr)
 	}

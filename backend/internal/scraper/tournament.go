@@ -72,9 +72,16 @@ type SetResult struct {
 
 // GameResult is the computed result for one game.
 type GameResult struct {
-	Round             string      `json:"round"`
-	OpponentName      string      `json:"opponent_name"`
-	Result            string      `json:"result"` // "W", "L", "D", or "C" for a cancelled game
+	Round        string `json:"round"`
+	OpponentName string `json:"opponent_name"`
+	Result       string `json:"result"` // "W", "L", "D", or "C" for a cancelled game
+	// TeamRGX/OpponentRGX are the combined pre-tournament RGX values (r1/r2)
+	// the RGX formula used for this game. TeamRGX is fixed across all of a
+	// player's games today; OpponentRGX varies per game/opponent. Team names
+	// are set by the caller (OurTeamName here, OpponentName above).
+	OurTeamName       string      `json:"our_team_name"`
+	TeamRGX           int         `json:"team_rgx"`
+	OpponentRGX       int         `json:"opponent_rgx"`
 	RGXDelta          int         `json:"rgx_delta"`
 	RGXDeltaPerPlayer float32     `json:"rgx_delta_per_player"`
 	HasProxy          bool        `json:"has_proxy"`
@@ -457,6 +464,8 @@ func GameResultFromCard(game GameCard, r1, r2 int, hasProxy bool) GameResult {
 		return GameResult{
 			Round:             game.Round,
 			OpponentName:      game.OpponentName,
+			TeamRGX:           r1,
+			OpponentRGX:       r2,
 			Result:            "C",
 			HasProxy:          hasProxy,
 			WasCancelled:      true,
@@ -472,6 +481,8 @@ func GameResultFromCard(game GameCard, r1, r2 int, hasProxy bool) GameResult {
 	return GameResult{
 		Round:             game.Round,
 		OpponentName:      game.OpponentName,
+		TeamRGX:           r1,
+		OpponentRGX:       r2,
 		Result:            result,
 		RGXDelta:          delta,
 		RGXDeltaPerPlayer: 0.5 * float32(delta),

@@ -454,10 +454,11 @@ func (h *Handler) buildDevSpecialResult(sp devSpecialPlayer, now time.Time) Toda
 		RGX:      sp.rgx,
 	}
 
+	const ourTeamRGX = 2800
 	games := []GameResult{
-		{Round: "Gr. A #1", OpponentName: "Team Nord", Result: "W", RGXDelta: 14, RGXDeltaPerPlayer: 7, HasProxy: false},
-		{Round: "Gr. A #2", OpponentName: "Team Süd", Result: "L", RGXDelta: -9, RGXDeltaPerPlayer: -4.5, HasProxy: false},
-		{Round: "HF #1", OpponentName: "Team West", Result: "W", RGXDelta: 11, RGXDeltaPerPlayer: 5.5, HasProxy: false},
+		{Round: "Gr. A #1", OpponentName: "Team Nord", OurTeamName: "Dev Fixtures Team", TeamRGX: ourTeamRGX, OpponentRGX: 2786, Result: "W", RGXDelta: 14, RGXDeltaPerPlayer: 7, HasProxy: false},
+		{Round: "Gr. A #2", OpponentName: "Team Süd", OurTeamName: "Dev Fixtures Team", TeamRGX: ourTeamRGX, OpponentRGX: 2818, Result: "L", RGXDelta: -9, RGXDeltaPerPlayer: -4.5, HasProxy: false},
+		{Round: "HF #1", OpponentName: "Team West", OurTeamName: "Dev Fixtures Team", TeamRGX: ourTeamRGX, OpponentRGX: 2778, Result: "W", RGXDelta: 11, RGXDeltaPerPlayer: 5.5, HasProxy: false},
 	}
 	totalDelta := 0
 	for _, g := range games {
@@ -492,10 +493,13 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 
 	partnerList, _ := h.players.RandomPlayers(player.ID, 1)
 	partnerRGX := 1200
+	partnerName := "Partner"
 	if len(partnerList) > 0 {
 		partnerRGX = partnerList[0].RGX
+		partnerName = partnerList[0].Name
 	}
 	r1 := player.RGX + partnerRGX
+	ourTeamName := player.Name + " / " + partnerName
 
 	rng := rand.New(rand.NewSource(now.UnixNano()))
 	rounds := []string{"Gr. A #1", "Gr. A #2", "Gr. A #3", "HF #1", "Finale"}
@@ -532,6 +536,9 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 		games = append(games, GameResult{
 			Round:             card.Round,
 			OpponentName:      card.OpponentName,
+			OurTeamName:       ourTeamName,
+			TeamRGX:           r1,
+			OpponentRGX:       r2,
 			Result:            result,
 			RGXDelta:          delta,
 			RGXDeltaPerPlayer: deltaPerPlayer,

@@ -103,6 +103,9 @@ Gets or creates today's `RgxJob` for this player and returns it immediately — 
       {
         "round": "Gr. A #1",
         "opponent_name": "Heidelberger Heidelbärinnen",
+        "our_team_name": "Karlsruher Karlchen",
+        "team_rgx": 3900,
+        "opponent_rgx": 3893,
         "result": "W",
         "rgx_delta": 7,
         "rgx_delta_per_player": 3.5,
@@ -116,6 +119,9 @@ Gets or creates today's `RgxJob` for this player and returns it immediately — 
       {
         "round": "Gr. A #2",
         "opponent_name": "Hanni & Anni",
+        "our_team_name": "Karlsruher Karlchen",
+        "team_rgx": 3900,
+        "opponent_rgx": 3906,
         "result": "L",
         "rgx_delta": -3,
         "rgx_delta_per_player": -1.5,
@@ -129,6 +135,9 @@ Gets or creates today's `RgxJob` for this player and returns it immediately — 
       {
         "round": "Gr. A #3",
         "opponent_name": "no grace",
+        "our_team_name": "Karlsruher Karlchen",
+        "team_rgx": 3900,
+        "opponent_rgx": 3850,
         "result": "C",
         "rgx_delta": 0,
         "rgx_delta_per_player": 0,

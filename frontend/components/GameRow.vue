@@ -17,40 +17,72 @@ const tone = computed(() =>
 
 <template>
   <div class="game-row" :class="{ cancelled: game.was_cancelled }">
-    <span class="badge" :class="game.result.toLowerCase()">{{
-      game.result
-    }}</span>
-    <div class="details">
-      <span class="opponent">{{ game.opponent_name }}</span>
-      <span v-if="game.was_cancelled || game.sets.length" class="meta">
-        <span v-if="game.was_cancelled">Abgesagt</span>
-        <span v-if="game.sets.length" class="chips">
-          <span v-for="(set, index) in game.sets" :key="index" class="chip">
-            {{ set.our_score }}:{{ set.opponent_score }}
+    <div class="teams">
+      <span class="team">{{ game.our_team_name }} ({{ game.team_rgx }})</span>
+      <span class="team-sep">vs</span>
+      <span class="team">{{ game.opponent_name }} ({{ game.opponent_rgx }})</span>
+    </div>
+    <div class="match">
+      <span class="badge" :class="game.result.toLowerCase()">{{
+        game.result
+      }}</span>
+      <div class="details">
+        <span class="opponent">{{ game.opponent_name }}</span>
+        <span v-if="game.was_cancelled || game.sets.length" class="meta">
+          <span v-if="game.was_cancelled">Abgesagt</span>
+          <span v-if="game.sets.length" class="chips">
+            <span v-for="(set, index) in game.sets" :key="index" class="chip">
+              {{ set.our_score }}:{{ set.opponent_score }}
+            </span>
           </span>
         </span>
+      </div>
+      <span class="delta" :class="tone">
+        {{ game.was_cancelled ? "—" : formatDelta(game.rgx_delta_per_player) }}
+        <sup
+          v-if="game.has_proxy"
+          class="proxy-marker"
+          title="Gegner-RGX geschätzt"
+          >*</sup
+        >
       </span>
     </div>
-    <span class="delta" :class="tone">
-      {{ game.was_cancelled ? "—" : formatDelta(game.rgx_delta_per_player) }}
-      <sup
-        v-if="game.has_proxy"
-        class="proxy-marker"
-        title="Gegner-RGX geschätzt"
-        >*</sup
-      >
-    </span>
   </div>
 </template>
 
 <style scoped>
 .game-row {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
   min-height: 44px;
   padding: 11px 20px;
   border-top: 1px solid var(--border);
+}
+
+.teams {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font: 500 11px/1.3 var(--font-mono);
+  color: var(--text-dim);
+}
+
+.team {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.team-sep {
+  flex: none;
+  color: var(--text-muted);
+}
+
+.match {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .badge {

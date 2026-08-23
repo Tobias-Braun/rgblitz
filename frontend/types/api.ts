@@ -29,6 +29,9 @@ export interface SetScore {
 export interface Game {
   round?: string;
   opponent_name: string;
+  our_team_name: string;
+  team_rgx: number;
+  opponent_rgx: number;
   result: GameResult;
   rgx_delta: number;
   rgx_delta_per_player: number;
