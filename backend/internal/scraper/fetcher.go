@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -93,6 +94,56 @@ func (f *FixtureFetcher) Fetch(path string) (io.ReadCloser, error) {
 	r, err := os.Open(full)
 	if err != nil {
 		return nil, fmt.Errorf("fixture fetch %q: %w", path, err)
+	}
+	return r, nil
+}
+
+// ManifestFileName is the index a capture writes next to its HTML files, mapping each
+// fetched playerzone URL path to the file its response body was saved as.
+const ManifestFileName = "manifest.json"
+
+// ManifestFetcher replays a capture directory: unlike FixtureFetcher, which maps a path to
+// a file by page *shape* (one snapshot per kind of page), it serves the exact response that
+// was recorded for that exact path. That's what lets a capture containing many division and
+// team pages — cmd/fixturecapture's whole-tournament mode — be replayed offline with full
+// fidelity.
+type ManifestFetcher struct {
+	Dir   string
+	Paths map[string]string
+}
+
+// NewManifestFetcher loads the manifest written by a capture. It fails if the manifest is
+// missing or unreadable rather than silently falling back to shape-based lookup, since a
+// partial replay would quietly produce different results than the capture did.
+func NewManifestFetcher(dir string) (*ManifestFetcher, error) {
+	raw, err := os.ReadFile(filepath.Join(dir, ManifestFileName))
+	if err != nil {
+		return nil, fmt.Errorf("read capture manifest: %w", err)
+	}
+	var paths map[string]string
+	if err := json.Unmarshal(raw, &paths); err != nil {
+		return nil, fmt.Errorf("parse capture manifest: %w", err)
+	}
+	if len(paths) == 0 {
+		return nil, fmt.Errorf("capture manifest %s maps no paths", filepath.Join(dir, ManifestFileName))
+	}
+	return &ManifestFetcher{Dir: dir, Paths: paths}, nil
+}
+
+// HasManifest reports whether dir is a capture directory that can be replayed path-exactly.
+func HasManifest(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, ManifestFileName))
+	return err == nil
+}
+
+func (f *ManifestFetcher) Fetch(path string) (io.ReadCloser, error) {
+	file, ok := f.Paths[path]
+	if !ok {
+		return nil, fmt.Errorf("capture manifest has no recording for path %q", path)
+	}
+	r, err := os.Open(filepath.Join(f.Dir, file))
+	if err != nil {
+		return nil, fmt.Errorf("replay fetch %q: %w", path, err)
 	}
 	return r, nil
 }

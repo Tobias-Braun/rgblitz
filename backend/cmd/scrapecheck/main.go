@@ -56,6 +56,19 @@ func main() {
 	var fetcher scraper.Fetcher
 	switch *mode {
 	case "dev":
+		// A capture directory (cmd/fixturecapture) carries a manifest mapping each recorded
+		// URL path to its file, so it replays request-for-request instead of by page shape —
+		// which is the only way a capture containing several division or team pages replays
+		// correctly.
+		if scraper.HasManifest(*fixtureDir) {
+			fmt.Printf("mode: dev — replaying the capture in %s\n", *fixtureDir)
+			mf, err := scraper.NewManifestFetcher(*fixtureDir)
+			if err != nil {
+				fatalf("%v", err)
+			}
+			fetcher = mf
+			break
+		}
 		fmt.Printf("mode: dev — reading fixtures from %s\n", *fixtureDir)
 		fetcher = scraper.NewFixtureFetcher(*fixtureDir)
 	case "prod":

@@ -21,7 +21,7 @@ type ProfileTournamentEntry struct {
 	TournamentTeamID int
 }
 
-// reLoadTournamentGames matches onclick="load_tournament_games(61549, '')".
+// reLoadTournamentGames matches onclick="load_tournament_games(61549, ”)".
 var reLoadTournamentGames = regexp.MustCompile(`load_tournament_games\((\d+)`)
 
 // ParseProfilePage extracts every tournament a player has played from their

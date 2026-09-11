@@ -33,6 +33,9 @@ func TestParseTournamentDetail_GRT(t *testing.T) {
 	if detail.Date != "2026-07-18" {
 		t.Errorf("date: got %q, want %q (first day of a two-day tournament)", detail.Date, "2026-07-18")
 	}
+	if detail.EndDate != "2026-07-19" {
+		t.Errorf("end date: got %q, want %q (last day of a two-day tournament)", detail.EndDate, "2026-07-19")
+	}
 }
 
 func TestParseTournamentDetail_NonGRT(t *testing.T) {
@@ -55,5 +58,8 @@ func TestParseTournamentDetail_NonGRT(t *testing.T) {
 	}
 	if detail.Date != "2026-08-08" {
 		t.Errorf("date: got %q, want %q (first day of a two-day tournament)", detail.Date, "2026-08-08")
+	}
+	if detail.EndDate != "2026-08-09" {
+		t.Errorf("end date: got %q, want %q (last day of a two-day tournament)", detail.EndDate, "2026-08-09")
 	}
 }

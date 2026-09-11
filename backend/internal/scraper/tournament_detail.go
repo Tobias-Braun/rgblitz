@@ -15,9 +15,10 @@ import (
 // (/tournaments/{id}-{slug}), used to classify a tournament as GRT or not before
 // computing RGX changes for any player found registered in it.
 type TournamentDetail struct {
-	Name  string
-	IsGRT bool
-	Date  string // YYYY-MM-DD, first day of the tournament
+	Name    string
+	IsGRT   bool
+	Date    string // YYYY-MM-DD, first day of the tournament
+	EndDate string // YYYY-MM-DD, last day; equal to Date for a single-day tournament
 }
 
 // reGRTLabel matches the "German Roundnet Tour <year>" label playerzone renders (next to
@@ -59,6 +60,7 @@ func ParseTournamentDetail(r io.Reader) (TournamentDetail, error) {
 	if err != nil {
 		return TournamentDetail{}, fmt.Errorf("tournament detail date: %w", err)
 	}
+	endDate := parseTournamentEndDate(dateText, date)
 
 	rankingText := doc.Find(".card-panel.tournament-details").First().Find(".info-row").Last().Text()
 	if rankingText == "" {
@@ -66,10 +68,39 @@ func ParseTournamentDetail(r io.Reader) (TournamentDetail, error) {
 	}
 
 	return TournamentDetail{
-		Name:  name,
-		IsGRT: reGRTLabel.MatchString(rankingText),
-		Date:  date,
+		Name:    name,
+		IsGRT:   reGRTLabel.MatchString(rankingText),
+		Date:    date,
+		EndDate: endDate,
 	}, nil
+}
+
+// parseTournamentEndDate returns the last date in the "Date:" field — the tournament's final
+// day. A single-day tournament renders only one date, in which case the start date is also
+// the end date. Unlike the start date this never fails the parse: callers that only care
+// about GRT status shouldn't break over an unreadable second date, and a range that
+// collapses to the start date is the safely narrow interpretation.
+func parseTournamentEndDate(text, startDate string) string {
+	all := reTournamentStartDate.FindAllStringSubmatch(text, -1)
+	if len(all) < 2 {
+		return startDate
+	}
+	last := all[len(all)-1]
+	monthKey := strings.ToLower(last[1])
+	if len(monthKey) > 3 {
+		monthKey = monthKey[:3]
+	}
+	month, ok := monthAbbreviations[monthKey]
+	if !ok {
+		return startDate
+	}
+	day, _ := strconv.Atoi(last[2])
+	year, _ := strconv.Atoi(last[3])
+	end := time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	if end < startDate {
+		return startDate
+	}
+	return end
 }
 
 // parseTournamentStartDate extracts the first calendar date found in text and returns it

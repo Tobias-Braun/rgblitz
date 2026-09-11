@@ -8,17 +8,20 @@
 # leave running in --watch mode, which sleeps until each top of the hour and captures
 # itself (no cron entry needed).
 #
-#   ./scripts/capture-fixtures.sh --players "PAULCHEN,Anna Beispiel" --watch
-#   ./scripts/capture-fixtures.sh --players PAULCHEN            # single run, window-gated
-#   ./scripts/capture-fixtures.sh --players PAULCHEN --force    # ignore the window
+#   ./scripts/capture-fixtures.sh --watch          # every tournament running today, hourly
+#   ./scripts/capture-fixtures.sh                  # single window-gated run
+#   ./scripts/capture-fixtures.sh --force          # ignore the window, capture now
+#   ./scripts/capture-fixtures.sh --players LUC2110  # narrow it to one player's scrape
 #
-# Each run writes a snapshot per player under scraper/captures/<date>/<HHMM>-<player>/ —
-# the fetched HTML (named so the directory replays as a FIXTURE_DIR), capture.json, and a
-# readable report.txt with every parsed intermediate and RGX formula value. See
-# backend/cmd/fixturecapture for the details of what lands in a snapshot.
+# With no --players it captures each tournament running today in full — every division,
+# every team, every game, with the RGX deltas the backend computes for them and a set of
+# consistency checks over both sides of every game. Each run writes a snapshot under
+# scraper/captures/<date>/<HHMM>-t<tournament-id>/ (or -<player-id> in player mode):
+# the fetched HTML, a manifest that replays it offline, capture.json, and a readable
+# report.txt. See backend/cmd/fixturecapture for what exactly lands in a snapshot.
 #
 # Cron equivalent of --watch (hourly, the script's own window check handles the rest):
-#   0 * * * * /path/to/rgblitz/scripts/capture-fixtures.sh --players PAULCHEN >> /tmp/rgblitz-capture.log 2>&1
+#   0 * * * * /path/to/rgblitz/scripts/capture-fixtures.sh >> /tmp/rgblitz-capture.log 2>&1
 
 set -euo pipefail
 
@@ -32,19 +35,25 @@ WATCH=false
 FORCE=false
 
 usage() {
-  sed -n '2,20p' "${BASH_SOURCE[0]}" | sed 's/^#\{0,1\} \{0,1\}//'
+  sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^#\{0,1\} \{0,1\}//'
   cat <<'EOF'
 
 Options:
-  --players LIST   comma-separated player IDs or names (or $CAPTURE_PLAYERS) — required
+  --players LIST   comma-separated player IDs or names (or $CAPTURE_PLAYERS); omit to
+                   capture every tournament running today in full
   --out DIR        capture root directory (default: <repo>/scraper/captures)
   --start HOUR     first hour of the capture window, 0-23 (default: 9)
   --end HOUR       last hour of the capture window, inclusive, 0-23 (default: 18)
   --watch          stay running and capture at every top of the hour inside the window
   --force          capture now even outside the weekend/hour window
   -h, --help       show this help
+
+Anything after -- is passed straight through to cmd/fixturecapture, e.g.
+  ./scripts/capture-fixtures.sh --force -- --divisions "Advanced,Pro"
 EOF
 }
+
+PASSTHROUGH=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -55,15 +64,18 @@ while [[ $# -gt 0 ]]; do
     --watch) WATCH=true; shift ;;
     --force) FORCE=true; shift ;;
     -h|--help) usage; exit 0 ;;
+    --) shift; PASSTHROUGH=("$@"); break ;;
     *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-if [[ -z "$PLAYERS" ]]; then
-  echo "error: --players is required (or set CAPTURE_PLAYERS)" >&2
-  usage >&2
-  exit 2
+# No --players means whole-tournament mode, which is the point of running this unattended:
+# it needs no advance knowledge of who is playing today.
+CAPTURE_ARGS=(--out "$OUT_DIR")
+if [[ -n "$PLAYERS" ]]; then
+  CAPTURE_ARGS+=(--players "$PLAYERS")
 fi
+CAPTURE_ARGS+=("${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}")
 
 # All scheduling decisions are made in Europe/Berlin, the timezone the backend and the
 # tournaments themselves run in — the machine's own timezone is irrelevant here.
@@ -80,10 +92,14 @@ in_window() {
 }
 
 capture() {
-  log "capturing: $PLAYERS"
+  if [[ -n "$PLAYERS" ]]; then
+    log "capturing players: $PLAYERS"
+  else
+    log "capturing every tournament running today"
+  fi
   # A failed capture (playerzone down, player not in the index) must not kill --watch —
   # the next hour is very likely to succeed, and the failure is already logged by the tool.
-  if (cd "$REPO_ROOT/backend" && go run ./cmd/fixturecapture --players "$PLAYERS" --out "$OUT_DIR"); then
+  if (cd "$REPO_ROOT/backend" && go run ./cmd/fixturecapture "${CAPTURE_ARGS[@]}"); then
     log "capture finished"
   else
     log "capture FAILED (exit $?) — continuing"

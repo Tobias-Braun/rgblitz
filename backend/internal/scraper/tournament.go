@@ -140,6 +140,60 @@ func ParseDivisionSidebar(r io.Reader) ([]Division, error) {
 	return divs, nil
 }
 
+// ParseDivisionLinks finds a tournament's divisions by their links alone: any
+// /tournaments/{id}-{slug}/teams/{div_id} href on the page, named from the link's own text
+// and the label of the group it sits in ("Open" + "Advanced" → "Open Advanced").
+//
+// It exists next to ParseDivisionSidebar, not instead of it: the sidebar parser is the
+// pipeline's source of truth and deliberately fails loudly when the markup it expects is
+// gone, which is a signal worth keeping. This one makes no assumptions about wrappers,
+// classes or ordering, so tooling that has to keep working across a layout change — the
+// whole-tournament capture in cmd/fixturecapture — can fall back to it and still collect
+// the pages needed to diagnose what changed. Names are best-effort and not guaranteed to
+// match the division name rendered on a schedule page.
+func ParseDivisionLinks(r io.Reader) ([]Division, error) {
+	doc, err := goquery.NewDocumentFromReader(r)
+	if err != nil {
+		return nil, fmt.Errorf("parse division links html: %w", err)
+	}
+
+	var divs []Division
+	seen := map[string]bool{}
+
+	doc.Find("[href]").Each(func(_ int, a *goquery.Selection) {
+		href, _ := a.Attr("href")
+		m := reDivisionTeamsHref.FindStringSubmatch(href)
+		if len(m) < 3 || seen[m[2]] {
+			return
+		}
+		seen[m[2]] = true
+
+		name := strings.TrimSpace(a.Text())
+		if group, ok := a.Closest("[aria-label]").Attr("aria-label"); ok {
+			if group = strings.TrimSpace(group); group != "" && name != "" {
+				name = group + " " + name
+			} else if name == "" {
+				name = group
+			}
+		}
+		if name == "" {
+			name = "division " + m[2]
+		}
+
+		divs = append(divs, Division{
+			ID:           m[2],
+			TournamentID: m[1],
+			Name:         name,
+			TeamsPath:    href,
+		})
+	})
+
+	if len(divs) == 0 {
+		return nil, fmt.Errorf("no division team links found on the page")
+	}
+	return divs, nil
+}
+
 // ParseDivisionTeams extracts team cards from a division teams page.
 func ParseDivisionTeams(r io.Reader) ([]TeamEntry, error) {
 	doc, err := goquery.NewDocumentFromReader(r)

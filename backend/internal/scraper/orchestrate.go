@@ -143,22 +143,62 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		return TodayResult{}, 0, fmt.Errorf("fetch division teams: %w", err)
 	}
 
-	var ourTeam TeamEntry
-	for _, t := range divisionTeams {
-		if t.TournamentTeamID == teamID {
-			ourTeam = t
-			break
-		}
-	}
+	day := ComputeTeamDayResult(schedule, divisionTeams, teamID)
 
 	// Use RGX values from the schedule page (more current than weekly cache).
 	// A woman's DB index RGX is always her Women RGX (see MergeWomenRGX), but she
 	// may be playing an Open tournament today at a different, live Open RGX —
 	// so ownRGX (this player's baseline for today) comes from the schedule page,
 	// not the DB, falling back to the DB value only if no match is found there.
+	ownRGX := player.RGX
+	for _, sp := range schedule.Players {
+		spRGX := sp.RGX
+		if spRGX <= 0 {
+			spRGX = DivisionStartingRGX(schedule.DivisionName)
+		}
+		if fuzzyPlayerNameMatch(sp.Name, player.Name) {
+			ownRGX = spRGX
+		}
+	}
+	pInfo.RGX = ownRGX
+
+	return TodayResult{
+		Status:     "ok",
+		Player:     pInfo,
+		Date:       dateStr,
+		TotalDelta: day.TotalDelta,
+		HasProxy:   day.HasProxy,
+		Games:      day.Games,
+	}, tournamentID, nil
+}
+
+// TeamDayResult is everything the RGX pipeline derives for one team's tournament day: the
+// team's combined pre-tournament RGX baseline and a delta for each of its games. It is
+// player-independent — both players on the team share these numbers.
+type TeamDayResult struct {
+	TeamRGX    int          `json:"team_rgx"` // r1 in the RGX formula
+	HasProxy   bool         `json:"has_proxy"`
+	TotalDelta int          `json:"total_delta"`
+	Games      []GameResult `json:"games"`
+}
+
+// ComputeTeamDayResult turns a parsed team schedule plus its division's team list into
+// per-game RGX deltas. It holds the whole r1/r2 resolution policy — schedule-page player
+// RGX preferred over the division team list, division starting values proxied in for
+// players and opponents with no RGX yet — so anything that wants a team's deltas (the
+// per-player API pipeline above, the whole-tournament capture in cmd/fixturecapture) gets
+// identical numbers rather than a second, drifting implementation.
+func ComputeTeamDayResult(schedule TeamScheduleResult, divisionTeams []TeamEntry, ourTeamID int) TeamDayResult {
+	var ourTeam TeamEntry
+	for _, t := range divisionTeams {
+		if t.TournamentTeamID == ourTeamID {
+			ourTeam = t
+			break
+		}
+	}
+
 	r1 := 0
 	hasProxy := false
-	ownRGX := player.RGX
 	for _, sp := range schedule.Players {
 		spRGX := sp.RGX
 		if spRGX <= 0 {
@@ -166,9 +206,6 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 			hasProxy = true
 		}
 		r1 += spRGX
-		if fuzzyPlayerNameMatch(sp.Name, player.Name) {
-			ownRGX = spRGX
-		}
 	}
 	if r1 == 0 {
 		r1 = ourTeam.CombinedRGX
@@ -197,16 +234,12 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		games = append(games, gr)
 	}
 
-	pInfo.RGX = ownRGX
-
-	return TodayResult{
-		Status:     "ok",
-		Player:     pInfo,
-		Date:       dateStr,
-		TotalDelta: totalDelta,
+	return TeamDayResult{
+		TeamRGX:    r1,
 		HasProxy:   hasProxy,
+		TotalDelta: totalDelta,
 		Games:      games,
-	}, tournamentID, nil
+	}
 }
 
 // --- playerzone fetchers (live or fixture-backed, via deps.Fetcher) ---

@@ -141,4 +141,3 @@ func TestGameResultFromCard_RGXDeltaPerPlayer(t *testing.T) {
 		})
 	}
 }
-
