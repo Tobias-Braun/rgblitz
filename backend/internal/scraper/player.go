@@ -173,12 +173,9 @@ func ParseRankingPage(r io.Reader) ([]db.Player, error) {
 
 		clubLogoURL, _ := row.Find("td.player-col div.player-club-community img.club-img").Attr("src")
 
-		// rgx-value may contain a trailing trend indicator (e.g. "1963  ↙"); take the first
-		// token. firstField returns "" (rather than panicking, like strings.Fields(...)[0]
-		// would) if the cell has no RGX text at all.
-		rgxText := strings.TrimSpace(row.Find("td.rgx-col span.rgx-value").First().Text())
-		rgxText = firstField(rgxText)
-		rgx, _ := strconv.Atoi(strings.ReplaceAll(rgxText, ".", "")) // DE locale uses . as thousands sep
+		// A player with no RGX yet has no badge at all, which reads as 0 — the value the
+		// new-player proxy logic downstream expects.
+		rgx := rgxFromBadge(row.Find("td.rgx-col").First())
 
 		gamesText := strings.TrimSpace(row.Find("td.games-col").First().Text())
 		games, _ := strconv.Atoi(strings.TrimSpace(gamesText))

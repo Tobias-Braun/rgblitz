@@ -37,13 +37,16 @@ func ParseProfilePage(r io.Reader) ([]ProfileTournamentEntry, error) {
 
 	var entries []ProfileTournamentEntry
 
-	doc.Find("li.year-item").Each(func(_ int, li *goquery.Selection) {
-		date := strings.TrimSpace(li.Find("div.team-tournament-date").First().Text())
+	doc.Find("li.year-item, li.rg-player-tournaments--item").Each(func(_ int, li *goquery.Selection) {
+		date := profileEntryDate(li)
 		if date == "" {
 			return
 		}
 
-		onclick, _ := li.Find("div.info-buttons rg-button[onclick]").First().Attr("onclick")
+		// The "Games" button is the only element carrying the tournament team ID. It used to
+		// sit in a div.info-buttons wrapper and now sits in the card's actions row, so it's
+		// matched by what it does rather than by where it is.
+		onclick, _ := li.Find("rg-button[onclick*='load_tournament_games']").First().Attr("onclick")
 		m := reLoadTournamentGames.FindStringSubmatch(onclick)
 		if len(m) < 2 {
 			return
@@ -60,4 +63,24 @@ func ParseProfilePage(r io.Reader) ([]ProfileTournamentEntry, error) {
 		return nil, fmt.Errorf("profile page parsed 0 tournament entries — possible DOM change")
 	}
 	return entries, nil
+}
+
+// reProfileEntryDate matches the DD.MM.YY date a tournament card's subtitle starts with,
+// e.g. "05.09.26, Bamberg".
+var reProfileEntryDate = regexp.MustCompile(`^(\d{2}\.\d{2}\.\d{2})`)
+
+// profileEntryDate reads the day a profile's tournament entry took place. It used to have
+// its own element; it is now the first field of the tournament card's subtitle, alongside
+// the location. Returns "" if neither yields a date in the expected DD.MM.YY shape, which
+// skips the entry rather than matching "today" against something that isn't a date.
+func profileEntryDate(li *goquery.Selection) string {
+	if date := strings.TrimSpace(li.Find("div.team-tournament-date").First().Text()); date != "" {
+		return date
+	}
+	subtitle, _ := li.Find("rg-expandable-card[subtitle]").First().Attr("subtitle")
+	m := reProfileEntryDate.FindStringSubmatch(strings.TrimSpace(subtitle))
+	if m == nil {
+		return ""
+	}
+	return m[1]
 }

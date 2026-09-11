@@ -48,7 +48,7 @@ func ParseTournamentDetail(r io.Reader) (TournamentDetail, error) {
 		return TournamentDetail{}, fmt.Errorf("parse tournament detail html: %w", err)
 	}
 
-	name := strings.TrimSpace(doc.Find("h3.kf-title").First().Text())
+	name := tournamentName(doc)
 	if name == "" {
 		return TournamentDetail{}, fmt.Errorf("tournament detail parsed no title — possible DOM change")
 	}
@@ -101,6 +101,21 @@ func parseTournamentEndDate(text, startDate string) string {
 		return startDate
 	}
 	return end
+}
+
+// tournamentName reads a tournament's name off its detail page. The heading it used to live
+// in is gone; it now sits in the tournament navigation bar's identity link, which every
+// tournament-scoped page renders. The document title is the last resort — it appends
+// " - RG Playerzone", which is stripped.
+func tournamentName(doc *goquery.Document) string {
+	if name := strings.TrimSpace(doc.Find("h3.kf-title").First().Text()); name != "" {
+		return name
+	}
+	if name := strings.TrimSpace(doc.Find("span.rg-tournament-nav--title").First().Text()); name != "" {
+		return name
+	}
+	title := strings.Join(strings.Fields(doc.Find("title").First().Text()), " ")
+	return strings.TrimSpace(strings.TrimSuffix(title, "- RG Playerzone"))
 }
 
 // parseTournamentStartDate extracts the first calendar date found in text and returns it

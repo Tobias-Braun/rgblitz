@@ -39,6 +39,33 @@ Every scrape (cron-triggered, startup-triggered, or via `Scheduler.ScrapeNow()`)
 - **RgxJob usage stats (`rgx_jobs_stats`) persist independently of `rgx_jobs`.** `rgx_jobs` is purged daily by cron; `rgx_jobs_stats` (`internal/db/stats.go`) is a separate, never-purged table recording one row per *genuinely created* job (never for a job reused from the dedup/freshness cache, and never for `DEV_MODE` synthetic jobs). `GET /api/stats/rgx-jobs` aggregates it for the frontend footer's all-time usage stat.
 - **Only GRT tournaments produce RGX changes.** Other national bodies (e.g. EURA) run tournaments on the same platform; a tournament's own detail page (`/tournaments/{id}-{slug}`) states whether it's GRT via a "German Roundnet Tour {year}" label. `internal/scraper.ScrapePlayerToday` resolves this once per tournament, permanently caching it in the never-purged `tournaments` table (`internal/db/tournaments.go`) — GRT status is assumed fixed forever once a tournament has started, so it's never re-scraped. A non-GRT tournament produces `{status: "no_tournament"}`, identical to no tournament at all.
 
+## Two playerzone layouts, one set of parsers
+
+Playerzone rebuilt its tournament pages around web components in September 2026. Every
+parser in `internal/scraper` reads **both** that layout and the older one, because the
+fixtures in `scraper/fixtures/` (captured 2026-07-19) are still the offline test corpus —
+don't "clean up" a fallback branch just because the live site no longer needs it. What
+moved:
+
+| Data | Current layout | Pre-September-2026 layout |
+|------|----------------|---------------------------|
+| Any RGX value (ranking rows, player cards) | `rg-score-badge[score]` | `span.rgx-value` text |
+| Tournament name (detail page) | `span.rg-tournament-nav--title` | `h3.kf-title` |
+| Divisions of a tournament | `div.rg-tournament-nav--context` links to `/teams/{id}` | `div.sub-section` blocks |
+| Profile tournament entries | `li.rg-player-tournaments--item`, date in the card's `subtitle` | `li.year-item`, date in `.team-tournament-date` |
+| Schedule page division/team name | `div.tournament-division` / nav / page title | `h3.event-title` / `div.second-title` |
+| Team ID in a game card | `load_team_info(a, b, null, null, gameID)` | `load_team_info(a, b)` |
+
+Two consequences worth knowing before touching the pipeline: a **played** team's schedule
+page links only its own division (labelled "Results", not by division name — hence the
+single-division fallback in `resolveDivisionTeamsPath`), and a schedule page for a
+tournament that hasn't started links **no** division at all, which is why a team with no
+games yet returns `ok` with an empty game list instead of failing.
+
+`cmd/fixturecapture` is the tool for diagnosing the next such change: its whole-tournament
+mode cross-checks both sides of every game, and a division whose deltas don't sum to 0 is
+the signal that a parser is silently reading the wrong value.
+
 ## Scraping robustness policy
 
 Every playerzone page is untrusted input. Treat the HTML as capable of changing at any
@@ -108,8 +135,9 @@ cmd/reindex/        # manual re-run of the player index scrape
 cmd/scrapecheck/    # manual fixture/live scrape smoke test
 cmd/checkpermission/ # manual robots.txt permission check
 cmd/rgxcalc/        # CLI: compute one game's RGX delta from raw inputs, no network/DB
-cmd/fixturecapture/ # CLI: snapshot a player's live scrape (HTML + parsed intermediates +
-                    # deltas) into a replayable fixture dir; driven by scripts/capture-fixtures.sh
+cmd/fixturecapture/ # CLI: snapshot a whole tournament running today (or one player's scrape)
+                    # into a replayable capture dir — HTML + parsed intermediates + deltas +
+                    # cross-checks; driven by scripts/capture-fixtures.sh
 internal/api/       # HTTP handlers + router
 internal/scraper/   # HTML parsers, fetcher, rate limiter, robots.txt permission check
 internal/jobqueue/  # single-worker queue that drains RgxJob rows through the scraper

@@ -68,11 +68,13 @@ own profile page instead of scanning the site for active tournaments.
 ```
 1. Derive numeric_id from player_id (the trailing digit run, e.g. "LUC2110" → "2110")
 2. GET https://playerzone.roundnetgermany.de/players/{numeric_id}
-3. Find all li.year-item entries — one per tournament this player has ever played
+3. Find all tournament entries — one per tournament this player has ever played
+   (li.rg-player-tournaments--item, or li.year-item in the pre-September-2026 layout)
 4. For each entry:
-   a. Extract tournament_date from .team-tournament-date (format DD.MM.YY)
+   a. Extract tournament_date (format DD.MM.YY): the leading field of the entry card's
+      subtitle ("05.09.26, Bamberg"), or .team-tournament-date in the older layout
    b. Extract tournament_team_id from the onclick="load_tournament_games(id, '')"
-      handler inside that entry's .info-buttons block
+      handler on that entry's "Games" button
       - This is a tournament-scoped team ID, distinct from the persistent team ID
         under .tournament-team — only the load_tournament_games ID resolves
         correctly on /tournaments/schedule/team/{id}
@@ -130,13 +132,18 @@ FUNCTION GetTodayResult(player_id):
      → Parse twice from the same response body:
        a. TeamSchedule: our team's players + their individual RGX (pre-tournament
           values shown on page; use these in preference to the weekly cache as
-          they are more current), division_name (h3.event-title), and all games
-          in order: [{round, opponent_name, set_scores[]}]
-       b. DivisionSidebar: every division in this tournament, each with its
-          display name (div.sub-section .sub-title) and teams-page path
-          (div.sub-section .big-title a[href])
+          they are more current — read from the rg-score-badge score attribute, or
+          span.rgx-value in the older layout), division_name (div.tournament-division
+          before the tournament starts, the tournament navigation's active entry once
+          it has, the page title "Schedule {team} - {division}" otherwise), and all
+          games in order: [{round, opponent_name, set_scores[]}]
+       b. DivisionSidebar: every division this page links, each with its display name
+          and teams-page path. A played team's schedule page links only its own
+          division; before the tournament starts it links none at all. Both are fine —
+          see step 5.
 
-  4. tournament_id = sidebar[0].tournament_id
+  4. tournament_id = sidebar[0].tournament_id, or the numeric ID of any
+     tournament-scoped link on the page when the page links no division
      # Every division in the sidebar shares the same tournament_id (it comes from the
      # tournament-scoped URL segment, not the division-scoped one) — so it can be read
      # off any sidebar entry, without first finding the one matching
@@ -150,8 +157,18 @@ FUNCTION GetTodayResult(player_id):
      # Resolved before the division-name match below, so a non-GRT tournament degrades
      # gracefully to "no_tournament" even if that match would otherwise fail.
 
-  5. found_division = sidebar entry WHERE name equals TeamSchedule.division_name
-     (case-insensitive)
+  5. IF games is empty: return {status: "ok", games: []}
+     # Registered for today but nothing played yet. The division team list below exists
+     # only to price opponents, and there are none — so don't fail over a page that
+     # isn't needed (a tournament that hasn't started links no division at all).
+
+  5.1. found_division = sidebar entry WHERE name equals TeamSchedule.division_name
+     (case-insensitive), else the only sidebar entry if there is exactly one
+     # A played team's schedule page links exactly one division — its own — and names
+     # that link after the navigation tab ("Results"), so a name match can't be required.
+     IF found_division == nil:
+       divisions = ParseDivisionSidebar(GET /tournaments/{tournament_id})
+       found_division = divisions entry matching division_name, else the only entry
      IF found_division == nil: fail loudly — DOM/parse mismatch, not "no tournament"
      # Only reached for GRT tournaments — found_division.teams_path is needed below.
 
@@ -254,7 +271,8 @@ FUNCTION ResolveTournamentGRT(tournament_id) → is_grt bool:
   # playerzone 302-redirects the numeric-only path to the full /{id}-{slug} URL;
   # no slug lookup needed.
 
-  name = h3.kf-title text
+  name = span.rg-tournament-nav--title text (h3.kf-title in the older layout;
+         the document title, minus its " - RG Playerzone" suffix, as a last resort)
   date = first date parsed from the "Date: <b>...</b>" field (first day, for
          multi-day tournaments)
   is_grt = page contains the text "German Roundnet Tour {year}"

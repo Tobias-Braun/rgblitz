@@ -140,34 +140,38 @@ func captureOneTournament(run runContext, opts tournamentOptions, entry scraper.
 		return snapshot
 	}
 
+	// A detail page the backend's own parser can't read is a finding, not a reason to stop:
+	// that failure is precisely what a capture needs to preserve, and the division pages
+	// below are reachable without it.
 	detail, err := scraper.ParseTournamentDetail(bytes.NewReader(raw))
 	if err != nil {
-		snapshot.FatalError = fmt.Sprintf("parse tournament detail: %v", err)
-		return snapshot
-	}
-	snapshot.Detail = &detail
+		snapshot.DetailError = err.Error()
+		fmt.Fprintf(os.Stderr, "  WARNING: the backend cannot parse this tournament's detail page: %v\n", err)
+		fmt.Fprintln(os.Stderr, "           (in production this fails GRT resolution and errors the job)")
+	} else {
+		snapshot.Detail = &detail
 
-	// The detail page is the authority on the date range: the listing only ever gives the
-	// start day for a tournament that has already begun (see ParseTournamentList).
-	today := run.now.Format("2006-01-02")
-	if detail.Date != "" && detail.EndDate != "" && (today < detail.Date || today > detail.EndDate) {
-		snapshot.Skipped = fmt.Sprintf("runs %s..%s, not today (%s)", detail.Date, detail.EndDate, today)
-		fmt.Printf("  skipped: %s\n", snapshot.Skipped)
-		return snapshot
-	}
-	if !detail.IsGRT && !opts.includeNonGRT {
-		snapshot.Skipped = "not a German Roundnet Tour tournament (the backend reports these as no_tournament); pass --include-non-grt to capture anyway"
-		fmt.Printf("  skipped: %s\n", snapshot.Skipped)
-		return snapshot
+		// The detail page is the authority on the date range: the listing only ever gives the
+		// start day for a tournament that has already begun (see ParseTournamentList).
+		today := run.now.Format("2006-01-02")
+		if detail.Date != "" && detail.EndDate != "" && (today < detail.Date || today > detail.EndDate) {
+			snapshot.Skipped = fmt.Sprintf("runs %s..%s, not today (%s)", detail.Date, detail.EndDate, today)
+			fmt.Printf("  skipped: %s\n", snapshot.Skipped)
+			return snapshot
+		}
+		if !detail.IsGRT && !opts.includeNonGRT {
+			snapshot.Skipped = "not a German Roundnet Tour tournament (the backend reports these as no_tournament); pass --include-non-grt to capture anyway"
+			fmt.Printf("  skipped: %s\n", snapshot.Skipped)
+			return snapshot
+		}
 	}
 
-	// The tournament detail page renders the same division sidebar as a team schedule page,
-	// so the divisions come from the page already fetched — no extra request.
-	divisions, err := scraper.ParseDivisionSidebar(bytes.NewReader(raw))
-	if err != nil {
-		snapshot.FatalError = fmt.Sprintf("parse division sidebar: %v", err)
+	divisions := discoverDivisions(run, raw, &snapshot)
+	if len(divisions) == 0 {
+		snapshot.FatalError = "no divisions found on the tournament detail page"
 		return snapshot
 	}
+	divisions = expandDivisions(run, divisions)
 
 	for _, div := range divisions {
 		if !divisionWanted(div.Name, opts.divisionsLike) {
@@ -182,6 +186,28 @@ func captureOneTournament(run runContext, opts tournamentOptions, entry scraper.
 
 	snapshot.Checks = runConsistencyChecks(snapshot.Divisions)
 	return snapshot
+}
+
+// discoverDivisions lists a tournament's divisions from its already-fetched detail page.
+// It prefers the sidebar parser the API pipeline itself uses, so a capture reflects what
+// production sees, and falls back to link-scanning when that parser no longer matches the
+// page — recording which one worked, since "the pipeline's parser failed here" is itself a
+// finding.
+func discoverDivisions(run runContext, detailHTML []byte, snapshot *tournamentCapture) []scraper.Division {
+	divisions, err := scraper.ParseDivisionSidebar(bytes.NewReader(detailHTML))
+	if err == nil {
+		return divisions
+	}
+	snapshot.SidebarError = err.Error()
+	fmt.Fprintf(os.Stderr, "  WARNING: the backend's division sidebar parser failed: %v\n", err)
+	fmt.Fprintln(os.Stderr, "           falling back to scanning the page for division links")
+
+	divisions, err = scraper.ParseDivisionLinks(bytes.NewReader(detailHTML))
+	if err != nil {
+		snapshot.SidebarError += "; link fallback: " + err.Error()
+		return nil
+	}
+	return divisions
 }
 
 // captureDivision fetches one division's team list and then every team's schedule.
@@ -209,6 +235,26 @@ func captureDivision(run runContext, opts tournamentOptions, div scraper.Divisio
 		dc.TeamDays = append(dc.TeamDays, captureTeam(run, team, teams))
 	}
 	return dc
+}
+
+// expandDivisions completes a division list that a tournament detail page left partial. The
+// current layout links only one division from the detail page; that division's teams page
+// links them all, and names them properly, so it is the better list whenever the first one
+// holds a single entry. The page is not re-fetched when it is captured a moment later — the
+// recorder serves a path it has already seen from the snapshot.
+func expandDivisions(run runContext, divisions []scraper.Division) []scraper.Division {
+	if len(divisions) != 1 {
+		return divisions
+	}
+	raw, err := fetchBytes(run.rec, divisions[0].TeamsPath)
+	if err != nil {
+		return divisions
+	}
+	linked, err := scraper.ParseDivisionLinks(bytes.NewReader(raw))
+	if err != nil || len(linked) == 0 {
+		return divisions
+	}
+	return linked
 }
 
 // captureTeam fetches one team's schedule and computes its day result through the exact
@@ -279,12 +325,18 @@ type tournamentCapture struct {
 	Weekday    string                      `json:"weekday"`
 	Listed     scraper.TournamentListEntry `json:"listed"`
 	Detail     *scraper.TournamentDetail   `json:"detail,omitempty"`
-	Skipped    string                      `json:"skipped,omitempty"`
-	FatalError string                      `json:"fatal_error,omitempty"`
-	Truncated  bool                        `json:"truncated,omitempty"`
-	Divisions  []divisionCapture           `json:"divisions,omitempty"`
-	Checks     consistencyChecks           `json:"checks"`
-	Fetched    []fetchRecord               `json:"fetched,omitempty"`
+	// DetailError / SidebarError record a parser of the production pipeline failing on this
+	// tournament's pages — the capture continues regardless, since that failure is the thing
+	// worth preserving.
+	DetailError        string            `json:"detail_error,omitempty"`
+	SidebarError       string            `json:"sidebar_error,omitempty"`
+	DivisionsFromLinks bool              `json:"divisions_from_links,omitempty"`
+	Skipped            string            `json:"skipped,omitempty"`
+	FatalError         string            `json:"fatal_error,omitempty"`
+	Truncated          bool              `json:"truncated,omitempty"`
+	Divisions          []divisionCapture `json:"divisions,omitempty"`
+	Checks             consistencyChecks `json:"checks"`
+	Fetched            []fetchRecord     `json:"fetched,omitempty"`
 }
 
 type divisionCapture struct {
@@ -453,6 +505,12 @@ func tournamentReport(c tournamentCapture) string {
 	if c.Detail != nil {
 		fmt.Fprintf(&b, "detail:     %s, runs %s..%s, grt=%t\n",
 			c.Detail.Name, c.Detail.Date, c.Detail.EndDate, c.Detail.IsGRT)
+	}
+	if c.DetailError != "" {
+		fmt.Fprintf(&b, "DETAIL PARSER FAILED (production would error the job here): %s\n", c.DetailError)
+	}
+	if c.SidebarError != "" {
+		fmt.Fprintf(&b, "SIDEBAR PARSER FAILED (production would error the job here): %s\n", c.SidebarError)
 	}
 	if c.Skipped != "" {
 		fmt.Fprintf(&b, "skipped:    %s\n", c.Skipped)

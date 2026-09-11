@@ -91,28 +91,9 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		return TodayResult{Status: "no_tournament", Player: pInfo}, 0, nil
 	}
 
-	schedule, sidebar, err := fetchTeamScheduleAndSidebar(deps, teamID)
+	schedule, sidebar, tournamentID, err := fetchTeamSchedulePage(deps, teamID)
 	if err != nil {
 		return TodayResult{}, 0, fmt.Errorf("fetch team schedule: %w", err)
-	}
-
-	// ParseDivisionSidebar already guarantees len(sidebar) >= 1 whenever it
-	// returns a nil error, but sidebar[0] is indexed here on parsed HTML output
-	// regardless — re-check explicitly rather than relying on that invariant
-	// holding across future changes to the parser.
-	if len(sidebar) == 0 {
-		return TodayResult{}, 0, fmt.Errorf("schedule page sidebar parsed 0 divisions")
-	}
-
-	// TournamentID is shared by every division in the sidebar (it comes from the
-	// tournament-scoped URL segment, not the division-scoped one), so it can be
-	// read off any entry — no need to first find the division that matches
-	// schedule.DivisionName. This lets GRT status be resolved before requiring a
-	// successful division-name match, which only actually matters once we know
-	// the tournament is GRT (see below).
-	tournamentID, err := strconv.Atoi(sidebar[0].TournamentID)
-	if err != nil {
-		return TodayResult{}, 0, fmt.Errorf("parse tournament ID from schedule page sidebar: %w", err)
 	}
 
 	isGRT, err := resolveTournamentGRT(deps, tournamentID, now)
@@ -122,25 +103,25 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 	if !isGRT {
 		// Non-GRT tournaments (e.g. EURA-rated ones) never produce RGX changes —
 		// treated exactly like no tournament today. Resolved before the
-		// division-name match below since it isn't needed for this branch, so a
-		// non-GRT tournament degrades gracefully even if that match would fail.
+		// division team list is needed, so a non-GRT tournament degrades
+		// gracefully even if that lookup would fail.
 		return TodayResult{Status: "no_tournament", Player: pInfo}, tournamentID, nil
 	}
 
-	var teamsPath string
-	for _, d := range sidebar {
-		if strings.EqualFold(d.Name, schedule.DivisionName) {
-			teamsPath = d.TeamsPath
-			break
+	// The division team list exists to price opponents. With no games played yet there are
+	// no opponents to price, so the result is reported without it rather than failing over
+	// a page we don't need — this is the "registered today, nothing played yet" state, and
+	// before a tournament starts its schedule page doesn't link a division at all.
+	var divisionTeams []TeamEntry
+	if len(schedule.Games) > 0 {
+		teamsPath, err := resolveDivisionTeamsPath(deps, sidebar, schedule.DivisionName, tournamentID)
+		if err != nil {
+			return TodayResult{}, 0, err
 		}
-	}
-	if teamsPath == "" {
-		return TodayResult{}, 0, fmt.Errorf("division %q not found in schedule page sidebar", schedule.DivisionName)
-	}
-
-	divisionTeams, err := fetchDivisionTeamsByPath(deps, teamsPath)
-	if err != nil {
-		return TodayResult{}, 0, fmt.Errorf("fetch division teams: %w", err)
+		divisionTeams, err = fetchDivisionTeamsByPath(deps, teamsPath)
+		if err != nil {
+			return TodayResult{}, 0, fmt.Errorf("fetch division teams: %w", err)
+		}
 	}
 
 	day := ComputeTeamDayResult(schedule, divisionTeams, teamID)
@@ -275,31 +256,109 @@ func fetchProfileEntries(deps ScrapeDeps, numericID string) ([]ProfileTournament
 	return entries, nil
 }
 
-// fetchTeamScheduleAndSidebar fetches the team schedule page once and parses
-// it twice — for the schedule itself and for the tournament's division
-// sidebar rendered alongside it. The body is buffered so both parsers can
-// read it independently.
-func fetchTeamScheduleAndSidebar(deps ScrapeDeps, teamID int) (TeamScheduleResult, []Division, error) {
+// fetchTeamSchedulePage fetches the team schedule page once and reads everything the
+// pipeline needs off it: the schedule itself, the divisions it links, and the ID of the
+// tournament it belongs to. The body is buffered so each parser can read it independently.
+//
+// Only the schedule is required. A page that links no division is still usable — before a
+// tournament starts it links none, and once it has been played it links only the team's own
+// one — so the division list is best-effort, and the tournament ID falls back to the
+// tournament-scoped links every such page carries.
+func fetchTeamSchedulePage(deps ScrapeDeps, teamID int) (TeamScheduleResult, []Division, int, error) {
 	body, err := deps.Fetcher.Fetch(fmt.Sprintf("/tournaments/schedule/team/%d", teamID))
 	if err != nil {
-		return TeamScheduleResult{}, nil, err
+		return TeamScheduleResult{}, nil, 0, err
 	}
 	defer body.Close()
 
 	raw, err := io.ReadAll(body)
 	if err != nil {
-		return TeamScheduleResult{}, nil, err
+		return TeamScheduleResult{}, nil, 0, err
 	}
 
 	schedule, err := ParseTeamSchedule(bytes.NewReader(raw), teamID)
 	if err != nil {
-		return TeamScheduleResult{}, nil, err
+		return TeamScheduleResult{}, nil, 0, err
 	}
-	sidebar, err := ParseDivisionSidebar(bytes.NewReader(raw))
+
+	// A sidebar parse failure is not fatal here: it only means this page doesn't link any
+	// division, which the caller handles.
+	sidebar, _ := ParseDivisionSidebar(bytes.NewReader(raw))
+
+	// Every division link carries the tournament ID in its own URL, so prefer it; otherwise
+	// read it off any other tournament-scoped link on the page.
+	for _, d := range sidebar {
+		if id, err := strconv.Atoi(d.TournamentID); err == nil && id != 0 {
+			return schedule, sidebar, id, nil
+		}
+	}
+	tournamentID, err := ParseTournamentID(bytes.NewReader(raw))
 	if err != nil {
-		return TeamScheduleResult{}, nil, err
+		return TeamScheduleResult{}, nil, 0, fmt.Errorf("resolve tournament ID from schedule page: %w", err)
 	}
-	return schedule, sidebar, nil
+	return schedule, sidebar, tournamentID, nil
+}
+
+// resolveDivisionTeamsPath picks the path to our division's team list. The schedule page
+// normally links it — either among every division of the tournament, or as the single
+// division the team plays in — and the tournament's own detail page is consulted only if it
+// doesn't.
+func resolveDivisionTeamsPath(deps ScrapeDeps, sidebar []Division, divisionName string, tournamentID int) (string, error) {
+	if path := matchDivision(sidebar, divisionName); path != "" {
+		return path, nil
+	}
+
+	divisions, err := fetchTournamentDivisions(deps, tournamentID)
+	if err != nil {
+		return "", fmt.Errorf("division %q not linked from the schedule page, and listing the tournament's divisions failed: %w",
+			divisionName, err)
+	}
+	if path := matchDivision(divisions, divisionName); path != "" {
+		return path, nil
+	}
+	return "", fmt.Errorf("division %q not found among the tournament's %d divisions", divisionName, len(divisions))
+}
+
+// matchDivision finds a division by name, falling back to the only division there is: a
+// schedule page of a played tournament links exactly one division — the team's own — and
+// names it after the navigation tab rather than the division, so a name match can't be
+// required in that case.
+func matchDivision(divisions []Division, name string) string {
+	for _, d := range divisions {
+		if strings.EqualFold(d.Name, name) {
+			return d.TeamsPath
+		}
+	}
+	if len(divisions) == 1 {
+		return divisions[0].TeamsPath
+	}
+	return ""
+}
+
+// fetchTournamentDivisions lists a tournament's divisions from its detail page, cached for
+// as long as a division team list is, since the two are fetched together.
+func fetchTournamentDivisions(deps ScrapeDeps, tournamentID int) ([]Division, error) {
+	cacheKey := fmt.Sprintf("tournament_divisions:%d", tournamentID)
+	if cached, ok := deps.Cache.Get(cacheKey); ok {
+		if divisions, ok := cached.([]Division); ok {
+			return divisions, nil
+		}
+		// See fetchProfileEntries: a mismatched type is treated as a cache miss rather
+		// than being allowed to panic.
+	}
+
+	body, err := deps.Fetcher.Fetch(fmt.Sprintf("/tournaments/%d", tournamentID))
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+
+	divisions, err := ParseDivisionSidebar(body)
+	if err != nil {
+		return nil, err
+	}
+	deps.Cache.Set(cacheKey, divisions, cache.TTLDivisionTeamsSuccess)
+	return divisions, nil
 }
 
 // resolveTournamentGRT reports whether tournamentID is a German Roundnet Tour

@@ -89,23 +89,80 @@ type GameResult struct {
 	Sets              []SetResult `json:"sets"`
 }
 
-// reTournamentTeamID matches onclick="load_team_info(\d+, 60615)".
-var reTournamentTeamIDOnclick = regexp.MustCompile(`load_team_info\(\d+,\s*(\d+)\)`)
+// reTournamentTeamIDOnclick matches onclick="load_team_info(\d+, 60615)" and captures the
+// second argument, the tournament_team_id. Game cards call the same function with further
+// arguments — load_team_info(40744, 62594, null, null, 457400) — so the match must not
+// require the capture group to be followed by the closing parenthesis.
+var reTournamentTeamIDOnclick = regexp.MustCompile(`load_team_info\(\s*\d+\s*,\s*(\d+)\s*[,)]`)
 
 // reDivisionTeamsHref matches /tournaments/{id}-{slug}/teams/{div_id}, capturing
 // both the tournament ID and the division ID.
 var reDivisionTeamsHref = regexp.MustCompile(`/tournaments/(\d+)-[^/]+/teams/(\d+)$`)
 
-// ParseDivisionSidebar extracts every division of the tournament from the sidebar
-// rendered on a team schedule page (/tournaments/schedule/team/{id}), keyed by
-// the division's display name so callers can match it against
-// TeamScheduleResult.DivisionName to find the division our own team belongs to.
+// reTournamentHref matches any tournament-scoped path, capturing the numeric tournament ID.
+var reTournamentHref = regexp.MustCompile(`^/tournaments/(\d+)-`)
+
+// ParseTournamentID reads the numeric ID of the tournament a page belongs to, from the
+// tournament-scoped links every tournament page carries (its navigation identity link, its
+// tabs, its division links). It's what identifies the tournament when the page doesn't
+// render a division sidebar to take the ID from.
+func ParseTournamentID(r io.Reader) (int, error) {
+	doc, err := goquery.NewDocumentFromReader(r)
+	if err != nil {
+		return 0, fmt.Errorf("parse tournament id html: %w", err)
+	}
+
+	found := 0
+	doc.Find("[href]").EachWithBreak(func(_ int, a *goquery.Selection) bool {
+		href, _ := a.Attr("href")
+		m := reTournamentHref.FindStringSubmatch(href)
+		if len(m) < 2 {
+			return true
+		}
+		id, err := strconv.Atoi(m[1])
+		if err != nil {
+			return true
+		}
+		found = id
+		return false
+	})
+
+	if found == 0 {
+		return 0, fmt.Errorf("no tournament link found on the page")
+	}
+	return found, nil
+}
+
+// ParseDivisionSidebar extracts every division of the tournament linked from the page,
+// keyed by the division's display name so callers can match it against
+// TeamScheduleResult.DivisionName to find the division our own team belongs to. It works on
+// a team schedule page (/tournaments/schedule/team/{id}) and on a tournament's own detail
+// page, both of which link a division's team list.
+//
+// Two layouts are supported. The original one renders a `div.sub-section` block per
+// division; the current one renders a tournament navigation bar whose dropdown links the
+// divisions, and on a played team's schedule page links only that team's own division (the
+// "Results" tab). When the newer layout leaves a link without a usable name of its own, the
+// division the page is currently showing is used — see currentDivisionName.
 func ParseDivisionSidebar(r io.Reader) ([]Division, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("parse division sidebar html: %w", err)
 	}
 
+	divs := parseDivisionSections(doc)
+	if len(divs) == 0 {
+		divs = parseDivisionLinks(doc)
+	}
+	if len(divs) == 0 {
+		return nil, fmt.Errorf("division sidebar parsed 0 divisions — possible DOM change")
+	}
+	return divs, nil
+}
+
+// parseDivisionSections reads the original sidebar layout: one div.sub-section per division,
+// its name in div.sub-title and its teams link in div.big-title.
+func parseDivisionSections(doc *goquery.Document) []Division {
 	var divs []Division
 
 	doc.Find("div.sub-section").Each(func(_ int, sec *goquery.Selection) {
@@ -134,31 +191,39 @@ func ParseDivisionSidebar(r io.Reader) ([]Division, error) {
 		divs = append(divs, Division{ID: divID, TournamentID: tournamentID, Name: name, TeamsPath: teamsPath})
 	})
 
-	if len(divs) == 0 {
-		return nil, fmt.Errorf("division sidebar parsed 0 divisions — possible DOM change")
-	}
-	return divs, nil
+	return divs
 }
 
 // ParseDivisionLinks finds a tournament's divisions by their links alone: any
 // /tournaments/{id}-{slug}/teams/{div_id} href on the page, named from the link's own text
-// and the label of the group it sits in ("Open" + "Advanced" → "Open Advanced").
+// plus the label of the group it sits in.
 //
-// It exists next to ParseDivisionSidebar, not instead of it: the sidebar parser is the
-// pipeline's source of truth and deliberately fails loudly when the markup it expects is
-// gone, which is a signal worth keeping. This one makes no assumptions about wrappers,
-// classes or ordering, so tooling that has to keep working across a layout change — the
-// whole-tournament capture in cmd/fixturecapture — can fall back to it and still collect
-// the pages needed to diagnose what changed. Names are best-effort and not guaranteed to
-// match the division name rendered on a schedule page.
+// It makes no assumptions about wrappers, classes or ordering, which is what ParseDivisionSidebar
+// falls back to when the markup it knows isn't there, and what tooling that must keep
+// working across a layout change (cmd/fixturecapture) uses directly.
 func ParseDivisionLinks(r io.Reader) ([]Division, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
 		return nil, fmt.Errorf("parse division links html: %w", err)
 	}
+	divs := parseDivisionLinks(doc)
+	if len(divs) == 0 {
+		return nil, fmt.Errorf("no division team links found on the page")
+	}
+	return divs, nil
+}
 
+// genericTabLabels are link texts that name a page rather than a division — the tournament
+// navigation labels a division's team list "Teams" or "Results" depending on whether it has
+// been played, so those must not be mistaken for the division's name.
+var genericTabLabels = map[string]bool{
+	"teams": true, "results": true, "games": true, "teams / results": true,
+}
+
+func parseDivisionLinks(doc *goquery.Document) []Division {
 	var divs []Division
 	seen := map[string]bool{}
+	current := currentDivisionName(doc)
 
 	doc.Find("[href]").Each(func(_ int, a *goquery.Selection) {
 		href, _ := a.Attr("href")
@@ -169,12 +234,17 @@ func ParseDivisionLinks(r io.Reader) ([]Division, error) {
 		seen[m[2]] = true
 
 		name := strings.TrimSpace(a.Text())
-		if group, ok := a.Closest("[aria-label]").Attr("aria-label"); ok {
-			if group = strings.TrimSpace(group); group != "" && name != "" {
-				name = group + " " + name
-			} else if name == "" {
-				name = group
-			}
+		if genericTabLabels[strings.ToLower(name)] {
+			// A navigation tab pointing at the current page's own division.
+			name = current
+		} else if group := divisionGroupLabel(a); group != "" && name != "" {
+			// Grouped dropdowns split the name in two: the tier on the item ("Advanced"),
+			// the category on the group ("Women"). Schedule pages spell the full name
+			// tier-first, so join it in that order to keep the two matchable.
+			name = name + " " + group
+		}
+		if name == "" {
+			name = current
 		}
 		if name == "" {
 			name = "division " + m[2]
@@ -188,10 +258,47 @@ func ParseDivisionLinks(r io.Reader) ([]Division, error) {
 		})
 	})
 
-	if len(divs) == 0 {
-		return nil, fmt.Errorf("no division team links found on the page")
+	return divs
+}
+
+// divisionGroupLabel returns the category a division link is grouped under, e.g. "Women" for
+// an "Advanced/Contender/Pro" entry. Only the tournament navigation's own grouping counts:
+// any other labelled ancestor (the page's main nav, a landmark region) would otherwise
+// contribute a meaningless prefix.
+func divisionGroupLabel(a *goquery.Selection) string {
+	group := a.Closest("div.rg-tournament-nav--division-group")
+	if group.Length() == 0 {
+		return ""
 	}
-	return divs, nil
+	if label, ok := group.Attr("aria-label"); ok {
+		if label = strings.TrimSpace(label); label != "" {
+			return label
+		}
+	}
+	return strings.TrimSpace(group.Find("span.rg-tournament-nav--division-group-label").First().Text())
+}
+
+// currentDivisionName reads the division the page is currently showing out of the tournament
+// navigation — the highlighted dropdown entry, or the collapsed label that stands in for it.
+// Returns "" when the page has no such navigation.
+func currentDivisionName(doc *goquery.Document) string {
+	context := doc.Find("div.rg-tournament-nav--context")
+	if context.Length() == 0 {
+		return ""
+	}
+
+	active := context.Find("rg-navigation-dropdown-item.active").First()
+	if name := strings.TrimSpace(active.Text()); name != "" && !genericTabLabels[strings.ToLower(name)] {
+		if group := divisionGroupLabel(active); group != "" {
+			return name + " " + group
+		}
+		return name
+	}
+
+	// The collapsed navigation item renders the current division as its own text, with the
+	// dropdown holding the alternatives — take only the text belonging to the item itself.
+	item := context.Find("rg-navigation-item").First()
+	return strings.TrimSpace(item.Contents().Not("rg-navigation-dropdown").Text())
 }
 
 // ParseDivisionTeams extracts team cards from a division teams page.
@@ -248,8 +355,8 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 
 	result := TeamScheduleResult{}
 
-	result.DivisionName = strings.TrimSpace(doc.Find("div.row.section-title h3.event-title").First().Text())
-	result.TeamName = strings.TrimSpace(doc.Find("div.second-title span a").First().Text())
+	result.DivisionName = scheduleDivisionName(doc)
+	result.TeamName = scheduleTeamName(doc)
 
 	// Parse each player card on the page — these are our team's players with individual RGX.
 	doc.Find("div.player-card").Each(func(_ int, card *goquery.Selection) {
@@ -263,10 +370,7 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 		// player cards at all, since RGX doesn't apply to them — firstField
 		// returns "" rather than panicking, which strconv.Atoi below turns into
 		// rgx 0, and the caller's proxy-RGX fallback (spRGX <= 0) takes it from there.
-		rgxText := strings.TrimSpace(card.Find("span.rgx-value").First().Text())
-		rgxText = firstField(rgxText)
-		rgx, _ := strconv.Atoi(strings.ReplaceAll(rgxText, ".", ""))
-		result.Players = append(result.Players, TeamPlayer{Name: name, RGX: rgx})
+		result.Players = append(result.Players, TeamPlayer{Name: name, RGX: rgxFromBadge(card)})
 	})
 
 	if len(result.Players) == 0 {
@@ -370,6 +474,82 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 	})
 
 	return result, nil
+}
+
+// rgxFromBadge reads the RGX value out of a container holding an RGX badge — a player card
+// on a schedule page, a row of the ranking table. The badge used to be a span holding the
+// number as text (optionally followed by a trend arrow, e.g. "1963 ↙") and is now an
+// rg-score-badge element carrying it in a score attribute; both are read, newest first.
+//
+// A missing badge is not an error: non-GRT tournaments don't render RGX at all, and a player
+// with no RGX yet has none to render. Either way this returns 0, and the caller's
+// proxy-RGX fallback takes over.
+func rgxFromBadge(container *goquery.Selection) int {
+	if score, ok := container.Find("rg-score-badge[score]").First().Attr("score"); ok {
+		if rgx, err := strconv.Atoi(strings.TrimSpace(strings.ReplaceAll(score, ".", ""))); err == nil {
+			return rgx
+		}
+	}
+	// The DE locale writes a thousands separator, so strip it before parsing.
+	rgxText := firstField(strings.TrimSpace(container.Find("span.rgx-value").First().Text()))
+	rgx, _ := strconv.Atoi(strings.ReplaceAll(rgxText, ".", ""))
+	return rgx
+}
+
+// scheduleDivisionName resolves the division a team schedule page belongs to. Playerzone
+// renders it in a different place depending on whether the tournament has started:
+// a "tournament-division" summary line before it does, the tournament navigation once it
+// has. The page title ("Schedule {team} - {division}") carries it in both cases and is used
+// as the fallback, ahead of the original layout's section heading.
+func scheduleDivisionName(doc *goquery.Document) string {
+	// "Advanced/Contender/Pro Women, 15 Teams" — the team count is not part of the name.
+	if line := strings.TrimSpace(doc.Find("div.tournament-division").First().Text()); line != "" {
+		if i := strings.Index(line, ","); i >= 0 {
+			line = line[:i]
+		}
+		return strings.TrimSpace(line)
+	}
+	if name := currentDivisionName(doc); name != "" {
+		return name
+	}
+	if _, division, ok := scheduleTitleParts(doc); ok {
+		return division
+	}
+	return strings.TrimSpace(doc.Find("div.row.section-title h3.event-title").First().Text())
+}
+
+// scheduleTeamName resolves whose schedule the page shows, across the same layout variants.
+func scheduleTeamName(doc *goquery.Document) string {
+	if name := strings.TrimSpace(doc.Find("div.second-title span a").First().Text()); name != "" {
+		return name
+	}
+	if name := strings.TrimSpace(doc.Find("div.tournament-team").First().Text()); name != "" {
+		return name
+	}
+	if team, _, ok := scheduleTitleParts(doc); ok {
+		return team
+	}
+	return strings.TrimSpace(doc.Find("div.row.section-title h3.event-title").First().Text())
+}
+
+// scheduleTitleParts splits a schedule page's title, "Schedule {team} - {division}", into
+// its two halves. Reported as not ok for any other title shape, so a differently-titled page
+// never yields a garbage name.
+func scheduleTitleParts(doc *goquery.Document) (team, division string, ok bool) {
+	title := strings.Join(strings.Fields(doc.Find("title").First().Text()), " ")
+	rest, found := strings.CutPrefix(title, "Schedule ")
+	if !found {
+		return "", "", false
+	}
+	team, division, found = strings.Cut(rest, " - ")
+	if !found {
+		return "", "", false
+	}
+	team, division = strings.TrimSpace(team), strings.TrimSpace(division)
+	if team == "" || division == "" {
+		return "", "", false
+	}
+	return team, division, true
 }
 
 // firstField returns the first whitespace-separated token in s, or "" if s has

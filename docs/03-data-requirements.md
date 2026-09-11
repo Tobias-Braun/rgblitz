@@ -136,7 +136,7 @@ the analogous rationale):
 | Field | Meaning |
 |-------|---------|
 | `id` | Numeric playerzone tournament ID |
-| `name` | Tournament name (`h3.kf-title` on the detail page) |
+| `name` | Tournament name (`span.rg-tournament-nav--title` on the detail page) |
 | `is_grt` | Whether the tournament counts towards the German Roundnet Tour |
 | `date` | First day of the tournament, `YYYY-MM-DD` |
 | `scraped_at` | When this row was first written |

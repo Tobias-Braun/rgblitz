@@ -138,53 +138,83 @@ If the player isn't found, or matches more than one player, `scrapecheck` prints
 
 ## Capture live fixtures during a tournament
 
-`cmd/fixturecapture` is the tool for debugging *wrong* results: it runs the same pipeline as `scrapecheck` against the live site, but writes every fetched page to disk together with what the parsers made of it. When a player reports a delta that doesn't match reality, the snapshot taken at that hour contains the exact HTML that produced it.
+`cmd/fixturecapture` is the tool for debugging *wrong* results: it fetches the pages the RGX pipeline reads and writes each one to disk together with what the parsers made of it. When a delta doesn't match reality, the snapshot taken at that hour contains the exact HTML that produced it.
+
+#### Tournament mode (no arguments)
 
 ```sh
 cd backend
+go run ./cmd/fixturecapture
+```
+
+Finds every tournament running today and captures all of it — the detail page, every division's team list, every team's schedule — and computes each team's RGX deltas through `scraper.ComputeTeamDayResult`, the same function the API pipeline calls. No advance knowledge of who is playing is needed, which is what makes it usable unattended.
+
+Seeing *both* sides of every game also makes the results auditable without knowing the right answer. `report.txt` ends with consistency checks:
+
+- **delta sum per division** — RGX is zero-sum per game (`x2 = -x1`), so a division must sum to 0; anything else means deltas aren't mirroring, usually an `r1`/`r2` mix-up;
+- **mirror mismatches** — games where the two teams' schedules disagree about the set scores, the combined RGX inputs, or deltas that don't cancel;
+- **proxied RGX** — teams whose own `r1`, or whose opponent's `r2`, fell back to a division starting value, which is the usual explanation for a surprising number.
+
+When a parser the *production* pipeline depends on fails (`ParseTournamentDetail`, `ParseDivisionSidebar`), the capture records it prominently and keeps going — falling back to `ParseDivisionLinks`, which finds divisions by their `/teams/{id}` links regardless of layout. A capture is most valuable exactly when the parsers are broken, so it must not abort with them.
+
+#### Player mode
+
+```sh
 go run ./cmd/fixturecapture --players "LUC2110,Lucas Christiani"
 ```
 
-Each player gets a snapshot directory `scraper/captures/<YYYY-MM-DD>/<HHMM>-<player-id>/` containing:
+Captures only what one player's `/today` request fetches, through the real `ScrapePlayerToday`. The ranking pages are fetched once per run and hard-linked into each snapshot, so a weekend of hourly captures doesn't cost a 3.8 MB ranking copy per player per hour.
+
+#### What a snapshot holds
+
+Snapshots land in `scraper/captures/<YYYY-MM-DD>/<HHMM>-t<tournament-id>/` (or `-<player-id>`):
 
 | File | Contents |
 |------|----------|
-| `*.html` | Every fetched page, named exactly as `FixtureFetcher` looks it up — so the snapshot directory *is* a fixture set |
-| `capture.json` | Fetched paths, the indexed player record, all parsed intermediates, and the final `TodayResult` |
-| `report.txt` | The same, rendered for reading: parsed schedule players and their RGX, the division team list with combined RGX, and every game's `r1`, `r2`, sets, `b`, `p`, `e1` and delta |
+| `*.html` | Every fetched page |
+| `manifest.json` | URL path → file, replayed by `scraper.ManifestFetcher` |
+| `capture.json` | Fetched paths, parsed intermediates, computed results, full check findings |
+| `report.txt` | The same rendered for reading: schedule players and their RGX, division teams with combined RGX, every game's `r1`, `r2`, sets, `b`, `p`, `e1` and delta, then the consistency checks |
 
-Because the HTML is named for `FixtureFetcher`, a bad snapshot replays offline as often as you like while you fix the parser:
+A snapshot replays offline as often as you like while you fix a parser — `scrapecheck` and `fixturecapture` both pick up the manifest automatically:
 
 ```sh
 go run ./cmd/scrapecheck --player LUC2110 \
-  --fixture-dir ../scraper/captures/2026-07-19/1400-LUC2110 --date 2026-07-19
-```
+  --fixture-dir ../scraper/captures/2026-09-12/1400-LUC2110 --date 2026-09-12
 
-The ranking pages are fetched once per run and hard-linked into each player's snapshot, so a weekend of hourly captures doesn't cost a 3.8 MB ranking copy per player per hour.
+go run ./cmd/fixturecapture --tournaments 695 --date 2026-09-12 \
+  --from-fixtures ../scraper/captures/2026-09-12/1400-t695
+```
 
 Flags:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--players` | — | Comma-separated player IDs or full names — required |
+| `--players` | — | Comma-separated player IDs or full names; omit for tournament mode |
+| `--tournaments` | — | Numeric tournament IDs to capture instead of discovering today's |
 | `--out` | `../scraper/captures` (or `$CAPTURE_DIR`) | Root directory for snapshots |
+| `--divisions` | — | Only capture divisions whose name contains one of these substrings |
+| `--include-non-grt` | `false` | Also capture non-GRT tournaments (the backend reports those as `no_tournament`) |
+| `--max-requests` | `600` | Request budget per run, so one huge tournament can't run for hours at 1 req/2s |
 | `--db-path` | temp dir | SQLite file backing the `tournaments` GRT-status cache |
-| `--from-fixtures` | — | Capture from a local fixture directory instead of the live site (exercises the tool itself with no network traffic) |
-| `--date` | today | Override "today" as `YYYY-MM-DD` — only useful with `--from-fixtures` |
+| `--from-fixtures` | — | Capture from a fixture or capture directory instead of the live site |
+| `--date` | today | Override "today" as `YYYY-MM-DD` |
+
+A full tournament costs roughly `1 + divisions + teams` requests — about 110 for a nine-division tournament, so ~4 minutes at the 1-request-per-2-seconds limit.
 
 ### Capturing automatically all weekend
 
 `scripts/capture-fixtures.sh` wraps the above with the domain's schedule: it captures only on Saturday/Sunday between 09:00 and 18:00 Europe/Berlin, and does nothing at any other time. Run it hourly from cron, or let it schedule itself:
 
 ```sh
-# stays running, captures at every top of the hour inside the window
-./scripts/capture-fixtures.sh --players "LUC2110,RAS1811" --watch
+# stays running, captures every tournament running today at each top of the hour
+./scripts/capture-fixtures.sh --watch
 
 # single window-gated run — the form to put in crontab
-0 * * * * /path/to/rgblitz/scripts/capture-fixtures.sh --players LUC2110 >> /tmp/rgblitz-capture.log 2>&1
+0 * * * * /path/to/rgblitz/scripts/capture-fixtures.sh >> /tmp/rgblitz-capture.log 2>&1
 ```
 
-`--force` captures immediately regardless of the weekday/hour window, and `--start`/`--end` move the window. A failed capture never stops `--watch`; it's logged and the next hour is attempted normally.
+`--players` narrows a run to specific players, `--force` captures immediately regardless of the weekday/hour window, and `--start`/`--end` move the window. Anything after `--` is passed through to `fixturecapture` (e.g. `-- --divisions Advanced`). A failed capture never stops `--watch`; it's logged and the next hour is attempted normally.
 
 ---
 
@@ -292,8 +322,8 @@ cmd/
   seed/        — one-shot DB seeder from ranking.html fixture
   scrapecheck/ — dry-run the scrape → RGX pipeline for one player (dev fixtures or live site)
   rgxcalc/     — pure RGX formula calculator, no network/DB involved
-  fixturecapture/ — snapshot every live page one player's scrape touches, plus the parsed
-                 intermediates and computed deltas, for debugging wrong results
+  fixturecapture/ — snapshot a whole tournament (or one player's scrape) from the live site:
+                 the HTML, the parsed intermediates, the computed deltas and cross-checks
   reindex/     — manually re-run the weekly player index scrape against the live site
   checkpermission/ — manually re-check robots.txt and update the stored RESPECT_PERMISSION result
 internal/
@@ -306,7 +336,8 @@ internal/
   scraper/  — HTML parsers for each playerzone page type (including a tournament's own
               detail page, for GRT classification), the RGX formula, and the Fetcher
               abstraction (HTTPFetcher for the live site, FixtureFetcher for dev mode /
-              tests / the scrapecheck CLI)
+              tests / the scrapecheck CLI, ManifestFetcher for replaying a capture
+              request-for-request)
 ```
 
 ---
