@@ -85,7 +85,7 @@ func NewFixtureFetcher(dir string) *FixtureFetcher {
 }
 
 func (f *FixtureFetcher) Fetch(path string) (io.ReadCloser, error) {
-	file, err := fixtureFileForPath(path)
+	file, err := FixtureFileForPath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -97,10 +97,12 @@ func (f *FixtureFetcher) Fetch(path string) (io.ReadCloser, error) {
 	return r, nil
 }
 
-// fixtureFileForPath maps a playerzone URL path to the fixture file that captures its
+// FixtureFileForPath maps a playerzone URL path to the fixture file that captures its
 // page shape. Order matters: more specific patterns must be checked before the general
-// "/tournaments/" fallback.
-func fixtureFileForPath(path string) (string, error) {
+// "/tournaments/" fallback. It is exported so tools that capture fresh snapshots from the
+// live site (cmd/fixturecapture) name their files exactly the way FixtureFetcher will
+// later look them up, making a capture directly usable as a FIXTURE_DIR.
+func FixtureFileForPath(path string) (string, error) {
 	switch {
 	case path == "/robots.txt":
 		return "robots.txt", nil

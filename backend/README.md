@@ -136,6 +136,58 @@ If the player isn't found, or matches more than one player, `scrapecheck` prints
 
 ---
 
+## Capture live fixtures during a tournament
+
+`cmd/fixturecapture` is the tool for debugging *wrong* results: it runs the same pipeline as `scrapecheck` against the live site, but writes every fetched page to disk together with what the parsers made of it. When a player reports a delta that doesn't match reality, the snapshot taken at that hour contains the exact HTML that produced it.
+
+```sh
+cd backend
+go run ./cmd/fixturecapture --players "LUC2110,Lucas Christiani"
+```
+
+Each player gets a snapshot directory `scraper/captures/<YYYY-MM-DD>/<HHMM>-<player-id>/` containing:
+
+| File | Contents |
+|------|----------|
+| `*.html` | Every fetched page, named exactly as `FixtureFetcher` looks it up — so the snapshot directory *is* a fixture set |
+| `capture.json` | Fetched paths, the indexed player record, all parsed intermediates, and the final `TodayResult` |
+| `report.txt` | The same, rendered for reading: parsed schedule players and their RGX, the division team list with combined RGX, and every game's `r1`, `r2`, sets, `b`, `p`, `e1` and delta |
+
+Because the HTML is named for `FixtureFetcher`, a bad snapshot replays offline as often as you like while you fix the parser:
+
+```sh
+go run ./cmd/scrapecheck --player LUC2110 \
+  --fixture-dir ../scraper/captures/2026-07-19/1400-LUC2110 --date 2026-07-19
+```
+
+The ranking pages are fetched once per run and hard-linked into each player's snapshot, so a weekend of hourly captures doesn't cost a 3.8 MB ranking copy per player per hour.
+
+Flags:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--players` | — | Comma-separated player IDs or full names — required |
+| `--out` | `../scraper/captures` (or `$CAPTURE_DIR`) | Root directory for snapshots |
+| `--db-path` | temp dir | SQLite file backing the `tournaments` GRT-status cache |
+| `--from-fixtures` | — | Capture from a local fixture directory instead of the live site (exercises the tool itself with no network traffic) |
+| `--date` | today | Override "today" as `YYYY-MM-DD` — only useful with `--from-fixtures` |
+
+### Capturing automatically all weekend
+
+`scripts/capture-fixtures.sh` wraps the above with the domain's schedule: it captures only on Saturday/Sunday between 09:00 and 18:00 Europe/Berlin, and does nothing at any other time. Run it hourly from cron, or let it schedule itself:
+
+```sh
+# stays running, captures at every top of the hour inside the window
+./scripts/capture-fixtures.sh --players "LUC2110,RAS1811" --watch
+
+# single window-gated run — the form to put in crontab
+0 * * * * /path/to/rgblitz/scripts/capture-fixtures.sh --players LUC2110 >> /tmp/rgblitz-capture.log 2>&1
+```
+
+`--force` captures immediately regardless of the weekday/hour window, and `--start`/`--end` move the window. A failed capture never stops `--watch`; it's logged and the next hour is attempted normally.
+
+---
+
 ## Manually re-run the player index scrape
 
 `cmd/reindex` runs the exact same job the Saturday 03:00 CET cron trigger runs — `Scheduler.ScrapeNow()` — against the live `playerzone.roundnetgermany.de` ranking pages, and upserts the results into SQLite. Use it to check the ranking-page scraper still works after a change, or to manually refresh/repair the index without waiting for (or restarting) the weekly schedule.
@@ -240,6 +292,8 @@ cmd/
   seed/        — one-shot DB seeder from ranking.html fixture
   scrapecheck/ — dry-run the scrape → RGX pipeline for one player (dev fixtures or live site)
   rgxcalc/     — pure RGX formula calculator, no network/DB involved
+  fixturecapture/ — snapshot every live page one player's scrape touches, plus the parsed
+                 intermediates and computed deltas, for debugging wrong results
   reindex/     — manually re-run the weekly player index scrape against the live site
   checkpermission/ — manually re-check robots.txt and update the stored RESPECT_PERMISSION result
 internal/

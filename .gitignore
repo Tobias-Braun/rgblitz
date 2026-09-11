@@ -5,4 +5,5 @@ frontend/.nuxt
 frontend/.output
 frontend/node_modules
 scraper/fixtures
+scraper/captures
 certs/

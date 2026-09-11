@@ -108,6 +108,8 @@ cmd/reindex/        # manual re-run of the player index scrape
 cmd/scrapecheck/    # manual fixture/live scrape smoke test
 cmd/checkpermission/ # manual robots.txt permission check
 cmd/rgxcalc/        # CLI: compute one game's RGX delta from raw inputs, no network/DB
+cmd/fixturecapture/ # CLI: snapshot a player's live scrape (HTML + parsed intermediates +
+                    # deltas) into a replayable fixture dir; driven by scripts/capture-fixtures.sh
 internal/api/       # HTTP handlers + router
 internal/scraper/   # HTML parsers, fetcher, rate limiter, robots.txt permission check
 internal/jobqueue/  # single-worker queue that drains RgxJob rows through the scraper
