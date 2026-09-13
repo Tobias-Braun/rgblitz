@@ -11,6 +11,7 @@ const props = defineProps<{
   before: number;
   after: number;
   totalDelta: number;
+  totalPerformanceDelta?: number;
   playerId: string;
 }>();
 

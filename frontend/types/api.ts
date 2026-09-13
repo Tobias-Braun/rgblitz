@@ -35,6 +35,8 @@ export interface Game {
   result: GameResult;
   rgx_delta: number;
   rgx_delta_per_player: number;
+  performance_delta: number;
+  performance_delta_per_player: number;
   has_proxy: boolean;
   was_cancelled: boolean;
   sets: SetScore[];
@@ -48,6 +50,7 @@ export interface TodayResultOk {
   // Omitted by the backend (Go `omitempty`) when the player is in an active
   // tournament but hasn't played a game yet today — treat as 0/false/[].
   total_delta?: number;
+  total_performance_delta?: number;
   has_proxy?: boolean;
   games?: Game[];
 }

@@ -37,15 +37,20 @@ const tone = computed(() =>
           </span>
         </span>
       </div>
-      <span class="delta" :class="tone">
-        {{ game.was_cancelled ? "—" : formatDelta(game.rgx_delta_per_player) }}
-        <sup
-          v-if="game.has_proxy"
-          class="proxy-marker"
-          title="Gegner-RGX geschätzt"
-          >*</sup
-        >
-      </span>
+      <div class="delta-columns">
+        <div class="delta-column">
+          <span class="delta-label">RGX</span>
+          <span class="delta-value" :class="tone">
+            {{ game.was_cancelled ? "—" : formatDelta(game.rgx_delta_per_player) }}
+            <sup
+              v-if="game.has_proxy"
+              class="proxy-marker"
+              title="Gegner-RGX geschätzt"
+              >*</sup
+            >
+          </span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -155,21 +160,42 @@ const tone = computed(() =>
   font: 700 11px/1.4 var(--font-mono);
 }
 
-.delta {
+.delta-columns {
+  flex: none;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.delta-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.delta-label {
+  font: 500 9px/1 var(--font-mono);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.delta-value {
   flex: none;
   font: 600 14px/1 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-.delta.positive {
+.delta-value.positive {
   color: var(--green);
 }
 
-.delta.negative {
+.delta-value.negative {
   color: var(--red);
 }
 
-.delta.neutral {
+.delta-value.neutral {
   color: var(--grey);
 }
 

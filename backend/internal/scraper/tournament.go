@@ -79,14 +79,16 @@ type GameResult struct {
 	// the RGX formula used for this game. TeamRGX is fixed across all of a
 	// player's games today; OpponentRGX varies per game/opponent. Team names
 	// are set by the caller (OurTeamName here, OpponentName above).
-	OurTeamName       string      `json:"our_team_name"`
-	TeamRGX           int         `json:"team_rgx"`
-	OpponentRGX       int         `json:"opponent_rgx"`
-	RGXDelta          int         `json:"rgx_delta"`
-	RGXDeltaPerPlayer float32     `json:"rgx_delta_per_player"`
-	HasProxy          bool        `json:"has_proxy"`
-	WasCancelled      bool        `json:"was_cancelled"`
-	Sets              []SetResult `json:"sets"`
+	OurTeamName         string      `json:"our_team_name"`
+	TeamRGX             int         `json:"team_rgx"`
+	OpponentRGX         int         `json:"opponent_rgx"`
+	RGXDelta            int         `json:"rgx_delta"`
+	RGXDeltaPerPlayer   float32     `json:"rgx_delta_per_player"`
+	PerformanceDelta    int         `json:"performance_delta"`
+	PerformanceDeltaPerPlayer float32 `json:"performance_delta_per_player"`
+	HasProxy            bool        `json:"has_proxy"`
+	WasCancelled        bool        `json:"was_cancelled"`
+	Sets                []SetResult `json:"sets"`
 }
 
 // reTournamentTeamIDOnclick matches onclick="load_team_info(\d+, 60615)" and captures the
@@ -606,14 +608,17 @@ func DivisionStartingRGX(divisionName string) int {
 // RGXBreakdown exposes every intermediate value of the RGX formula, useful for displaying
 // or debugging a single game's calculation (see cmd/rgxcalc).
 type RGXBreakdown struct {
-	B     float64 // 1.0 for Best-of-3, 0.75 for single-set
-	P     float64 // match outcome value, see MatchP
-	E1    float64 // expected score for our team given r1/r2
-	Delta int     // rounded RGX delta for our team
+	B                  float64 // 1.0 for Best-of-3, 0.75 for single-set
+	P                  float64 // match outcome value, see MatchP
+	E1                 float64 // expected score for our team given r1/r2
+	Delta              int     // rounded RGX delta for our team
+	PerformanceE1      float64 // expected score using d=350
+	PerformanceDelta   int     // rounded performance delta for our team
 }
 
 // ComputeDeltaBreakdown computes the RGX formula for a single game and returns every
-// intermediate value alongside the final rounded delta.
+// intermediate value alongside the final rounded delta. It also computes performance
+// using d=350 instead of d=550.
 //   - r1: combined pre-tournament RGX of our team
 //   - r2: combined pre-tournament RGX of the opponent team
 //   - setsWon, setsLost: sets won/lost by our team in this game
@@ -631,7 +636,17 @@ func ComputeDeltaBreakdown(r1, r2, setsWon, setsLost int) RGXBreakdown {
 	e1 := 1.0 / (1.0 + math.Pow(10, float64(r2-r1)/550.0))
 	delta := b * 50.0 * (p - e1)
 
-	return RGXBreakdown{B: b, P: p, E1: e1, Delta: int(math.Round(delta))}
+	performanceE1 := 1.0 / (1.0 + math.Pow(10, float64(r2-r1)/350.0))
+	performanceDelta := b * 50.0 * (p - performanceE1)
+
+	return RGXBreakdown{
+		B:                  b,
+		P:                  p,
+		E1:                 e1,
+		Delta:              int(math.Round(delta)),
+		PerformanceE1:      performanceE1,
+		PerformanceDelta:   int(math.Round(performanceDelta)),
+	}
 }
 
 // ComputeGameDelta calculates the RGX delta for our team in a single game.
@@ -689,39 +704,44 @@ func MatchP(won, lost int) float64 {
 	}
 }
 
-// GameResultFromCard converts a parsed GameCard into a GameResult using the RGX formula.
-// A cancelled game never contributes to RGX (delta 0) since it wasn't actually
-// played to completion, but its (possibly partial) set scores are still reported.
+// GameResultFromCard converts a parsed GameCard into a GameResult using the RGX formula
+// and performance formula (d=350).
+// A cancelled game never contributes to RGX or performance (delta 0) since it wasn't
+// actually played to completion, but its (possibly partial) set scores are still reported.
 func GameResultFromCard(game GameCard, r1, r2 int, hasProxy bool) GameResult {
 	sets := orientSets(game)
 	if game.WasCancelled {
 		return GameResult{
-			Round:             game.Round,
-			OpponentName:      game.OpponentName,
-			TeamRGX:           r1,
-			OpponentRGX:       r2,
-			Result:            "C",
-			HasProxy:          hasProxy,
-			WasCancelled:      true,
-			Sets:              sets,
-			RGXDelta:          0,
-			RGXDeltaPerPlayer: 0,
+			Round:                     game.Round,
+			OpponentName:              game.OpponentName,
+			TeamRGX:                   r1,
+			OpponentRGX:               r2,
+			Result:                    "C",
+			HasProxy:                  hasProxy,
+			WasCancelled:              true,
+			Sets:                      sets,
+			RGXDelta:                  0,
+			RGXDeltaPerPlayer:         0,
+			PerformanceDelta:          0,
+			PerformanceDeltaPerPlayer: 0,
 		}
 	}
 
 	setsWon, setsLost := countSets(game)
-	delta := ComputeGameDelta(r1, r2, game)
+	breakdown := ComputeDeltaBreakdown(r1, r2, setsWon, setsLost)
 	result := setResultChar(setsWon, setsLost)
 	return GameResult{
-		Round:             game.Round,
-		OpponentName:      game.OpponentName,
-		TeamRGX:           r1,
-		OpponentRGX:       r2,
-		Result:            result,
-		RGXDelta:          delta,
-		RGXDeltaPerPlayer: 0.5 * float32(delta),
-		HasProxy:          hasProxy,
-		Sets:              sets,
+		Round:                     game.Round,
+		OpponentName:              game.OpponentName,
+		TeamRGX:                   r1,
+		OpponentRGX:               r2,
+		Result:                    result,
+		RGXDelta:                  breakdown.Delta,
+		RGXDeltaPerPlayer:         0.5 * float32(breakdown.Delta),
+		PerformanceDelta:          breakdown.PerformanceDelta,
+		PerformanceDeltaPerPlayer: 0.5 * float32(breakdown.PerformanceDelta),
+		HasProxy:                  hasProxy,
+		Sets:                      sets,
 	}
 }
 

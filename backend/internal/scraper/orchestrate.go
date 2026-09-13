@@ -26,13 +26,14 @@ type PlayerInfo struct {
 }
 
 type TodayResult struct {
-	Status     string       `json:"status"`
-	Stale      bool         `json:"stale,omitempty"`
-	Player     *PlayerInfo  `json:"player,omitempty"`
-	Date       string       `json:"date,omitempty"`
-	TotalDelta int          `json:"total_delta,omitempty"`
-	HasProxy   bool         `json:"has_proxy,omitempty"`
-	Games      []GameResult `json:"games,omitempty"`
+	Status                  string       `json:"status"`
+	Stale                   bool         `json:"stale,omitempty"`
+	Player                  *PlayerInfo  `json:"player,omitempty"`
+	Date                    string       `json:"date,omitempty"`
+	TotalDelta              int          `json:"total_delta,omitempty"`
+	TotalPerformanceDelta   int          `json:"total_performance_delta,omitempty"`
+	HasProxy                bool         `json:"has_proxy,omitempty"`
+	Games                   []GameResult `json:"games,omitempty"`
 }
 
 // ScrapeDeps bundles the dependencies ScrapePlayerToday needs, shared between
@@ -144,12 +145,13 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 	pInfo.RGX = ownRGX
 
 	return TodayResult{
-		Status:     "ok",
-		Player:     pInfo,
-		Date:       dateStr,
-		TotalDelta: day.TotalDelta,
-		HasProxy:   day.HasProxy,
-		Games:      day.Games,
+		Status:                "ok",
+		Player:                pInfo,
+		Date:                  dateStr,
+		TotalDelta:            day.TotalDelta,
+		TotalPerformanceDelta: day.TotalPerformanceDelta,
+		HasProxy:              day.HasProxy,
+		Games:                 day.Games,
 	}, tournamentID, nil
 }
 
@@ -157,10 +159,11 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 // team's combined pre-tournament RGX baseline and a delta for each of its games. It is
 // player-independent — both players on the team share these numbers.
 type TeamDayResult struct {
-	TeamRGX    int          `json:"team_rgx"` // r1 in the RGX formula
-	HasProxy   bool         `json:"has_proxy"`
-	TotalDelta int          `json:"total_delta"`
-	Games      []GameResult `json:"games"`
+	TeamRGX                 int          `json:"team_rgx"` // r1 in the RGX formula
+	HasProxy                bool         `json:"has_proxy"`
+	TotalDelta              int          `json:"total_delta"`
+	TotalPerformanceDelta   int          `json:"total_performance_delta"`
+	Games                   []GameResult `json:"games"`
 }
 
 // ComputeTeamDayResult turns a parsed team schedule plus its division's team list into
@@ -194,6 +197,7 @@ func ComputeTeamDayResult(schedule TeamScheduleResult, divisionTeams []TeamEntry
 
 	var games []GameResult
 	totalDelta := 0
+	totalPerformanceDelta := 0
 
 	for _, g := range schedule.Games {
 		r2 := 0
@@ -212,14 +216,16 @@ func ComputeTeamDayResult(schedule TeamScheduleResult, divisionTeams []TeamEntry
 		gr := GameResultFromCard(g, r1, r2, opponentHasProxy)
 		gr.OurTeamName = schedule.TeamName
 		totalDelta += gr.RGXDelta
+		totalPerformanceDelta += gr.PerformanceDelta
 		games = append(games, gr)
 	}
 
 	return TeamDayResult{
-		TeamRGX:    r1,
-		HasProxy:   hasProxy,
-		TotalDelta: totalDelta,
-		Games:      games,
+		TeamRGX:               r1,
+		HasProxy:              hasProxy,
+		TotalDelta:            totalDelta,
+		TotalPerformanceDelta: totalPerformanceDelta,
+		Games:                 games,
 	}
 }
 

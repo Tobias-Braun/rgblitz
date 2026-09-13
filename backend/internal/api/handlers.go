@@ -456,22 +456,25 @@ func (h *Handler) buildDevSpecialResult(sp devSpecialPlayer, now time.Time) Toda
 
 	const ourTeamRGX = 2800
 	games := []GameResult{
-		{Round: "Gr. A #1", OpponentName: "Team Nord", OurTeamName: "Dev Fixtures Team", TeamRGX: ourTeamRGX, OpponentRGX: 2786, Result: "W", RGXDelta: 14, RGXDeltaPerPlayer: 7, HasProxy: false},
-		{Round: "Gr. A #2", OpponentName: "Team Süd", OurTeamName: "Dev Fixtures Team", TeamRGX: ourTeamRGX, OpponentRGX: 2818, Result: "L", RGXDelta: -9, RGXDeltaPerPlayer: -4.5, HasProxy: false},
-		{Round: "HF #1", OpponentName: "Team West", OurTeamName: "Dev Fixtures Team", TeamRGX: ourTeamRGX, OpponentRGX: 2778, Result: "W", RGXDelta: 11, RGXDeltaPerPlayer: 5.5, HasProxy: false},
+		computeDevGameResult("Gr. A #1", "Team Nord", "Dev Fixtures Team", ourTeamRGX, 2786, 2, 0),
+		computeDevGameResult("Gr. A #2", "Team Süd", "Dev Fixtures Team", ourTeamRGX, 2818, 0, 2),
+		computeDevGameResult("HF #1", "Team West", "Dev Fixtures Team", ourTeamRGX, 2778, 2, 1),
 	}
 	totalDelta := 0
+	totalPerformanceDelta := 0
 	for _, g := range games {
 		totalDelta += g.RGXDelta
+		totalPerformanceDelta += g.PerformanceDelta
 	}
 
 	return TodayResponse{
-		Status:     "ok",
-		Stale:      sp.id == "dev-stale",
-		Player:     pInfo,
-		Date:       now.Format("2006-01-02"),
-		TotalDelta: totalDelta,
-		Games:      games,
+		Status:                "ok",
+		Stale:                 sp.id == "dev-stale",
+		Player:                pInfo,
+		Date:                  now.Format("2006-01-02"),
+		TotalDelta:            totalDelta,
+		TotalPerformanceDelta: totalPerformanceDelta,
+		Games:                 games,
 	}
 }
 
@@ -515,6 +518,7 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 
 	var games []GameResult
 	totalDelta := 0
+	totalPerformanceDelta := 0
 
 	for i := 0; i < numGames; i++ {
 		team := opponents[i*2 : i*2+2]
@@ -529,28 +533,31 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 			Outcome:      outcomeWord(setsWon, setsLost),
 		}
 
-		delta := scraper.ComputeGameDelta(r1, r2, card)
-		deltaPerPlayer := 0.5 * float32(delta)
+		breakdown := scraper.ComputeDeltaBreakdown(r1, r2, setsWon, setsLost)
 		result := resultLetter(setsWon, setsLost)
-		totalDelta += delta
+		totalDelta += breakdown.Delta
+		totalPerformanceDelta += breakdown.PerformanceDelta
 		games = append(games, GameResult{
-			Round:             card.Round,
-			OpponentName:      card.OpponentName,
-			OurTeamName:       ourTeamName,
-			TeamRGX:           r1,
-			OpponentRGX:       r2,
-			Result:            result,
-			RGXDelta:          delta,
-			RGXDeltaPerPlayer: deltaPerPlayer,
+			Round:                     card.Round,
+			OpponentName:              card.OpponentName,
+			OurTeamName:               ourTeamName,
+			TeamRGX:                   r1,
+			OpponentRGX:               r2,
+			Result:                    result,
+			RGXDelta:                  breakdown.Delta,
+			RGXDeltaPerPlayer:         0.5 * float32(breakdown.Delta),
+			PerformanceDelta:          breakdown.PerformanceDelta,
+			PerformanceDeltaPerPlayer: 0.5 * float32(breakdown.PerformanceDelta),
 		})
 	}
 
 	return TodayResponse{
-		Status:     "ok",
-		Player:     pInfo,
-		Date:       now.Format("2006-01-02"),
-		TotalDelta: totalDelta,
-		Games:      games,
+		Status:                "ok",
+		Player:                pInfo,
+		Date:                  now.Format("2006-01-02"),
+		TotalDelta:            totalDelta,
+		TotalPerformanceDelta: totalPerformanceDelta,
+		Games:                 games,
 	}
 }
 
@@ -724,4 +731,27 @@ func jsonError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func computeDevGameResult(round, opponentName, ourTeamName string, teamRGX, opponentRGX, setsWon, setsLost int) GameResult {
+	breakdown := scraper.ComputeDeltaBreakdown(teamRGX, opponentRGX, setsWon, setsLost)
+	result := "D"
+	if setsWon > setsLost {
+		result = "W"
+	} else if setsLost > setsWon {
+		result = "L"
+	}
+	return GameResult{
+		Round:                     round,
+		OpponentName:              opponentName,
+		OurTeamName:               ourTeamName,
+		TeamRGX:                   teamRGX,
+		OpponentRGX:               opponentRGX,
+		Result:                    result,
+		RGXDelta:                  breakdown.Delta,
+		RGXDeltaPerPlayer:         0.5 * float32(breakdown.Delta),
+		PerformanceDelta:          breakdown.PerformanceDelta,
+		PerformanceDeltaPerPlayer: 0.5 * float32(breakdown.PerformanceDelta),
+		HasProxy:                  false,
+	}
 }

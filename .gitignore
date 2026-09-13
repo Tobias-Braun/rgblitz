@@ -1,5 +1,7 @@
 backend/cache/
 backend/data/
+backend/bin/
+bin/
 .env
 frontend/.nuxt
 frontend/.output

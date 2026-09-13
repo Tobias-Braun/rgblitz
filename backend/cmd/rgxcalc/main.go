@@ -36,10 +36,16 @@ func main() {
 	fmt.Printf("inputs:  r1=%d  r2=%d  sets=%d:%d\n\n", *r1, *r2, *won, *lost)
 	fmt.Printf("b  (format factor)      = %.2f   %s\n", bd.B, formatNote(bd.B))
 	fmt.Printf("p  (match outcome)      = %.2f\n", bd.P)
+	fmt.Printf("\nRGX (d=550):\n")
 	fmt.Printf("e1 (expected score)     = 1 / (1 + 10^((r2-r1)/550)) = %.4f\n", bd.E1)
 	fmt.Printf("delta = round(b * 50 * (p - e1))\n")
 	fmt.Printf("      = round(%.2f * 50 * (%.2f - %.4f))\n", bd.B, bd.P, bd.E1)
 	fmt.Printf("      = %+d\n", bd.Delta)
+	fmt.Printf("\nPerformance (d=350):\n")
+	fmt.Printf("e1 (expected score)     = 1 / (1 + 10^((r2-r1)/350)) = %.4f\n", bd.PerformanceE1)
+	fmt.Printf("delta = round(b * 50 * (p - e1))\n")
+	fmt.Printf("      = round(%.2f * 50 * (%.2f - %.4f))\n", bd.B, bd.P, bd.PerformanceE1)
+	fmt.Printf("      = %+d\n", bd.PerformanceDelta)
 }
 
 func formatNote(b float64) string {
