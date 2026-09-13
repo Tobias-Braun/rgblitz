@@ -23,27 +23,61 @@ const before = computed(() => props.result.player.rgx);
 // halve it. The backend omits the field entirely (Go `omitempty`) when it's
 // exactly 0, e.g. a day where games net out dead even.
 const totalDeltaPerPlayer = computed(() => (props.result.total_delta ?? 0) / 2);
-const totalPerformanceDeltaPerPlayer = computed(() => (props.result.total_performance_delta ?? 0) / 2);
+const totalPerformanceDeltaPerPlayer = computed(
+  () => (props.result.total_performance_delta ?? 0) / 2
+);
 const after = computed(
   () => props.result.player.rgx + totalDeltaPerPlayer.value
 );
 const games = computed(() => props.result.games ?? []);
 
 // Competition difficulty verdict based on gap between RGX and Performance
-const competitionGap = computed(() => totalDeltaPerPlayer.value - totalPerformanceDeltaPerPlayer.value);
+const competitionGap = computed(
+  () => totalDeltaPerPlayer.value - totalPerformanceDeltaPerPlayer.value
+);
 
 const competitionVerdict = computed(() => {
   const gap = competitionGap.value;
   if (gap > 12) {
-    return { category: "stark überbewertet", icon: "😌", color: "heavily-overvalued", explanation: "Du hast schlechter gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen deutlich schwächere Gegner gespielt. Deine Performance ist weniger aussagekräftig als dein RGX-Ergebnis vermuten lässt." };
+    return {
+      category: "stark überbewertet",
+      icon: "😌",
+      color: "heavily-overvalued",
+      explanation:
+        "Du hast schlechter gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen deutlich schwächere Gegner gespielt. Deine Performance ist weniger aussagekräftig als dein RGX-Ergebnis vermuten lässt.",
+    };
   } else if (gap > 4) {
-    return { category: "leicht überbewertet", icon: "🟡", color: "slightly-overvalued", explanation: "Du hast etwas schlechter gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen schwächere Gegner gespielt als erwartet. Deine Performance ist etwas weniger beeindruckend als das Ergebnis zeigt." };
+    return {
+      category: "leicht überbewertet",
+      icon: "🟡",
+      color: "slightly-overvalued",
+      explanation:
+        "Du hast etwas schlechter gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen schwächere Gegner gespielt als erwartet. Deine Performance ist etwas weniger beeindruckend als das Ergebnis zeigt.",
+    };
   } else if (gap >= -4) {
-    return { category: "normal", icon: "→", color: "normal", explanation: "Du hast genauso gespielt, wie die Änderung deiner RGX suggeriert. Du hast gegen Gegner der erwarteten Stärke gespielt. Deine Performance entspricht fair deinem heutigen RGX-Ergebnis." };
+    return {
+      category: "normal",
+      icon: "→",
+      color: "normal",
+      explanation:
+        "Du hast genauso gespielt, wie die Änderung deiner RGX suggeriert. Du hast gegen Gegner der erwarteten Stärke gespielt. Deine Performance entspricht fair deinem heutigen RGX-Ergebnis.",
+    };
   } else if (gap >= -12) {
-    return { category: "leicht unterbewertet", icon: "💪", color: "slightly-undervalued", explanation: "Du hast besser gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen stärkere Gegner gespielt als erwartet. Deine Performance ist beeindruckender als dein RGX-Ergebnis vermuten lässt." };
+    return {
+      category: "leicht unterbewertet",
+      icon: "💪",
+      color: "slightly-undervalued",
+      explanation:
+        "Du hast besser gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen stärkere Gegner gespielt als erwartet. Deine Performance ist beeindruckender als dein RGX-Ergebnis vermuten lässt.",
+    };
   } else {
-    return { category: "stark unterbewertet", icon: "🔥", color: "heavily-undervalued", explanation: "Du hast deutlich besser gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen deutlich stärkere Gegner gespielt. Deine Performance war außergewöhnlich beeindruckend im Vergleich zu deinem RGX-Ergebnis." };
+    return {
+      category: "stark unterbewertet",
+      icon: "🔥",
+      color: "heavily-undervalued",
+      explanation:
+        "Du hast deutlich besser gespielt, als die Änderung deiner RGX suggeriert. Du hast gegen deutlich stärkere Gegner gespielt. Deine Performance war außergewöhnlich beeindruckend im Vergleich zu deinem RGX-Ergebnis.",
+    };
   }
 });
 
@@ -194,13 +228,13 @@ const jobFinishedAtLabel = computed(() => {
 
 .verdict-accordion {
   padding: 0 20px;
-  max-width: 40%;
+  width: 70%;
   margin: 0 auto;
 }
 
 @media (max-width: 768px) {
   .verdict-accordion {
-    max-width: 100%;
+    width: 100%;
   }
 }
 
