@@ -47,14 +47,23 @@ type Handler struct {
 	jobs        *db.JobStore
 	stats       *db.JobStatsStore
 	queue       *jobqueue.Queue
+	feedback    *db.FeedbackStore
+	notifier    FeedbackNotifier
 
 	// Now returns the current time; defaults to time.Now. Overridable in tests so the
 	// weekday/time-window guard in TodayResult can be exercised deterministically.
 	Now func() time.Time
 }
 
-func NewHandler(cfg *config.Config, ps *db.PlayerStore, c *cache.Cache, fetcher scraper.Fetcher, permissions *db.PermissionStore, jobs *db.JobStore, stats *db.JobStatsStore, queue *jobqueue.Queue) *Handler {
-	return &Handler{cfg: cfg, players: ps, cache: c, fetcher: fetcher, permissions: permissions, jobs: jobs, stats: stats, queue: queue, Now: time.Now}
+// FeedbackNotifier sends a best-effort notification for a newly created
+// Feedback row. Implemented by *email.ResendClient in production; tests can
+// substitute a fake instead of hitting the real Resend API.
+type FeedbackNotifier interface {
+	SendFeedbackNotification(fb *db.Feedback) error
+}
+
+func NewHandler(cfg *config.Config, ps *db.PlayerStore, c *cache.Cache, fetcher scraper.Fetcher, permissions *db.PermissionStore, jobs *db.JobStore, stats *db.JobStatsStore, queue *jobqueue.Queue, feedback *db.FeedbackStore, notifier FeedbackNotifier) *Handler {
+	return &Handler{cfg: cfg, players: ps, cache: c, fetcher: fetcher, permissions: permissions, jobs: jobs, stats: stats, queue: queue, feedback: feedback, notifier: notifier, Now: time.Now}
 }
 
 // scrapePermitted reports whether live playerzone requests may be made.
@@ -722,6 +731,52 @@ func ProxyURL(original string) string {
 	return "/api/images/proxy?url=" + encoded
 }
 
+// --- /api/feedback ---
+
+type FeedbackRequest struct {
+	Rating int    `json:"rating"`
+	Text   string `json:"text"`
+}
+
+type FeedbackResponse struct {
+	Status string `json:"status"`
+	ID     int64  `json:"id"`
+}
+
+func (h *Handler) SubmitFeedback(w http.ResponseWriter, r *http.Request) {
+	var req FeedbackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Rating < 1 || req.Rating > 5 {
+		jsonError(w, http.StatusBadRequest, "rating must be between 1 and 5")
+		return
+	}
+	text := strings.TrimSpace(req.Text)
+	if len(text) > 4000 {
+		jsonError(w, http.StatusBadRequest, "text too long")
+		return
+	}
+
+	fb, err := h.feedback.Create(req.Rating, text, h.Now())
+	if err != nil {
+		log.Printf("create feedback: %v", err)
+		jsonError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// Best-effort: the feedback is already saved, so a notification failure
+	// (missing config, Resend outage) must never surface to the user.
+	go func() {
+		if err := h.notifier.SendFeedbackNotification(fb); err != nil {
+			log.Printf("send feedback notification: %v", err)
+		}
+	}()
+
+	jsonOK(w, FeedbackResponse{Status: "ok", ID: fb.ID})
+}
+
 func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
@@ -742,6 +797,7 @@ func computeDevGameResult(round, opponentName, ourTeamName string, teamRGX, oppo
 		result = "L"
 	}
 	return GameResult{
+		Sets:                      devSetScores(setsWon, setsLost),
 		Round:                     round,
 		OpponentName:              opponentName,
 		OurTeamName:               ourTeamName,
@@ -754,4 +810,19 @@ func computeDevGameResult(round, opponentName, ourTeamName string, teamRGX, oppo
 		PerformanceDeltaPerPlayer: 0.5 * float32(breakdown.PerformanceDelta),
 		HasProxy:                  false,
 	}
+}
+
+// devSetScores synthesizes a plausible set-by-set score line for the dev fixture
+// result. Unlike a live scrape, the dev fixture has no real per-set scores — only
+// the won/lost count — so this fills in placeholder scores consistent with that
+// count for GameRow.vue's set-list rendering.
+func devSetScores(setsWon, setsLost int) []scraper.SetResult {
+	sets := make([]scraper.SetResult, 0, setsWon+setsLost)
+	for i := 0; i < setsWon; i++ {
+		sets = append(sets, scraper.SetResult{OurScore: 21, OpponentScore: 15})
+	}
+	for i := 0; i < setsLost; i++ {
+		sets = append(sets, scraper.SetResult{OurScore: 15, OpponentScore: 21})
+	}
+	return sets
 }

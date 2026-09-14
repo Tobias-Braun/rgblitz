@@ -10,6 +10,7 @@ import (
 	"github.com/tobiasmarkusbraun/rgblitz/internal/config"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/cron"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/email"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/jobqueue"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
@@ -28,6 +29,8 @@ func main() {
 	jobs := db.NewJobStore(database)
 	jobStats := db.NewJobStatsStore(database)
 	tournaments := db.NewTournamentStore(database)
+	feedback := db.NewFeedbackStore(database)
+	notifier := email.NewResendClient(cfg.ResendAPIKey, cfg.ResendFromEmail, cfg.FeedbackNotifyEmail)
 	memCache := cache.New()
 
 	// One request to playerzone every 2 seconds across all goroutines.
@@ -67,7 +70,7 @@ func main() {
 	}
 	queue.Start()
 
-	handler := api.NewHandler(cfg, players, memCache, fetcher, permissions, jobs, jobStats, queue)
+	handler := api.NewHandler(cfg, players, memCache, fetcher, permissions, jobs, jobStats, queue, feedback, notifier)
 	router := api.NewRouter(handler)
 
 	addr := ":" + cfg.Port

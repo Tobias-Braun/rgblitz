@@ -88,3 +88,14 @@ export interface RgxJobStats {
   succeeded: number;
   failed: number;
 }
+
+// POST /api/feedback
+export interface FeedbackRequest {
+  rating: number;
+  text?: string;
+}
+
+export interface FeedbackResponse {
+  status: "ok";
+  id: number;
+}

@@ -86,6 +86,13 @@ func migrate(db *sql.DB) error {
 			date       TEXT NOT NULL,
 			scraped_at DATETIME NOT NULL
 		);
+
+		CREATE TABLE IF NOT EXISTS feedback (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			rating     INTEGER NOT NULL,
+			text       TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL
+		);
 	`)
 	return err
 }

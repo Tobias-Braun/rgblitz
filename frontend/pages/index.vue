@@ -9,6 +9,7 @@ import { useTodayResult } from "~/composables/useTodayResult";
 
 const selectedPlayer = ref<PlayerSummary | null>(null);
 const acknowledgedStale = ref(false);
+const showFeedback = ref(false);
 
 const playerId = computed(() => selectedPlayer.value?.id ?? "");
 const {
@@ -31,6 +32,7 @@ async function selectPlayer(player: PlayerSummary) {
 function searchAgain() {
   selectedPlayer.value = null;
   acknowledgedStale.value = false;
+  showFeedback.value = false;
 }
 
 async function retry() {
@@ -63,8 +65,10 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
       <AppHeader />
       <PlayerChip :player="selectedPlayer" detailed @close="searchAgain" />
       <main class="content">
+        <FeedbackForm v-if="showFeedback" @done="showFeedback = false" />
+
         <ResultLoading
-          v-if="pending && !data"
+          v-else-if="pending && !data"
           :queue-position="queuePosition"
         />
 
@@ -107,6 +111,7 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
           :job-finished-at="jobFinishedAt"
           @search-again="searchAgain"
           @refresh="refresh"
+          @feedback="showFeedback = true"
         />
 
         <ResultError

@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,14 +102,24 @@ func newTestHandler(t *testing.T, fetcher scraper.Fetcher, cfg *config.Config) (
 	jobs := db.NewJobStore(conn)
 	jobStats := db.NewJobStatsStore(conn)
 	tournaments := db.NewTournamentStore(conn)
+	feedback := db.NewFeedbackStore(conn)
 
 	c := cache.New()
 	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: c, ProxyURL: api.ProxyURL, Tournaments: tournaments}
 	queue := jobqueue.New(jobs, jobStats, store, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
 	queue.Start()
 
-	h := api.NewHandler(cfg, store, c, fetcher, permissions, jobs, jobStats, queue)
+	h := api.NewHandler(cfg, store, c, fetcher, permissions, jobs, jobStats, queue, feedback, fakeFeedbackNotifier{})
 	return h, store, permissions, jobs, jobStats
+}
+
+// fakeFeedbackNotifier is a no-op api.FeedbackNotifier for tests — this repo has no
+// existing pattern for mocking outbound HTTP, and tests should never hit the real
+// Resend API.
+type fakeFeedbackNotifier struct{}
+
+func (fakeFeedbackNotifier) SendFeedbackNotification(fb *db.Feedback) error {
+	return nil
 }
 
 // pollJobUntilFinal polls GET /api/players/{id}/today/jobs/{jobId} until the job reaches
@@ -608,5 +620,115 @@ func TestRgxJobStats_TracksRealScrapesOnly(t *testing.T) {
 	}
 	if devStats != (api.RgxJobStatsResponse{}) {
 		t.Errorf("dev-mode job affected usage stats: %+v, want all zero", devStats)
+	}
+}
+
+// recordingFeedbackNotifier is a fake api.FeedbackNotifier that records the feedback it
+// was asked to notify about, so tests can assert SubmitFeedback triggers a notification
+// without hitting the real Resend API.
+type recordingFeedbackNotifier struct {
+	mu   sync.Mutex
+	sent []*db.Feedback
+	err  error
+}
+
+func (n *recordingFeedbackNotifier) SendFeedbackNotification(fb *db.Feedback) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.sent = append(n.sent, fb)
+	return n.err
+}
+
+func (n *recordingFeedbackNotifier) sentCount() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return len(n.sent)
+}
+
+// newFeedbackTestHandler builds a minimal Handler for exercising SubmitFeedback only —
+// unlike newTestHandler, it doesn't seed a fixture-backed player index or start a job
+// queue, since /api/feedback touches none of that.
+func newFeedbackTestHandler(t *testing.T) (*api.Handler, *recordingFeedbackNotifier) {
+	t.Helper()
+
+	dbPath := filepath.Join(t.TempDir(), "feedback-test.db")
+	conn, err := db.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+
+	feedback := db.NewFeedbackStore(conn)
+	notifier := &recordingFeedbackNotifier{}
+	h := api.NewHandler(&config.Config{}, nil, nil, nil, nil, nil, nil, nil, feedback, notifier)
+	return h, notifier
+}
+
+func TestSubmitFeedback(t *testing.T) {
+	h, notifier := newFeedbackTestHandler(t)
+	router := api.NewRouter(h)
+
+	body := strings.NewReader(`{"rating": 5, "text": "Klasse App!"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/feedback", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var resp api.FeedbackResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Status != "ok" || resp.ID == 0 {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for notifier.sentCount() == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if notifier.sentCount() != 1 {
+		t.Fatalf("notifier called %d times, want 1", notifier.sentCount())
+	}
+}
+
+func TestSubmitFeedbackRatingOutOfRange(t *testing.T) {
+	h, _ := newFeedbackTestHandler(t)
+	router := api.NewRouter(h)
+
+	for _, rating := range []int{0, 6, -1} {
+		body := strings.NewReader(fmt.Sprintf(`{"rating": %d, "text": ""}`, rating))
+		req := httptest.NewRequest(http.MethodPost, "/api/feedback", body)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("rating %d: status = %d, want 400", rating, rec.Code)
+		}
+	}
+}
+
+func TestSubmitFeedbackMalformedBody(t *testing.T) {
+	h, _ := newFeedbackTestHandler(t)
+	router := api.NewRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/feedback", strings.NewReader(`not json`))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestSubmitFeedbackTextOptional(t *testing.T) {
+	h, _ := newFeedbackTestHandler(t)
+	router := api.NewRouter(h)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/feedback", strings.NewReader(`{"rating": 3}`))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 }

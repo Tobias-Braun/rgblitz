@@ -16,6 +16,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   "search-again": [];
   refresh: [];
+  feedback: [];
 }>();
 
 const before = computed(() => props.result.player.rgx);
@@ -150,6 +151,10 @@ const jobFinishedAtLabel = computed(() => {
     <p v-if="result.has_proxy" class="proxy-note">
       * Gegner-RGX geschätzt (neuer Spieler:in ohne Turnierhistorie)
     </p>
+
+    <button type="button" class="feedback-cta" @click="emit('feedback')">
+      Feedback geben
+    </button>
   </div>
 </template>
 
@@ -321,5 +326,23 @@ const jobFinishedAtLabel = computed(() => {
 .verdict-heavily-undervalued {
   border: 1px solid var(--green);
   color: var(--green);
+}
+
+.feedback-cta {
+  min-height: 44px;
+  margin: 24px auto 0;
+  padding: 0 24px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: 1px solid var(--purple);
+  color: var(--purple);
+  font: 600 15px/1 var(--font-body);
+}
+
+@media (max-width: 768px) {
+  .feedback-cta {
+    margin-left: 20px;
+    margin-right: 20px;
+  }
 }
 </style>

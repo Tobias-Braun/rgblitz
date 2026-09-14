@@ -187,3 +187,6 @@ types/
 | `DEV_MODE` | `false` | Enables synthetic `dev-ok`/`dev-stale`/`dev-error`/`dev-loading` players for exercising every result state without live scraping |
 | `FIXTURE_DIR` | `""` | When set, scraper reads from local fixture HTML instead of playerzone |
 | `RESPECT_PERMISSION` | `false` | When `true`, every scrape checks `robots.txt` before making any playerzone request |
+| `RESEND_API_KEY` | `""` | Resend API key for the feedback email notification. Optional — if unset (or `FEEDBACK_NOTIFY_EMAIL` is unset), the notification silently no-ops; feedback is still stored in SQLite either way |
+| `RESEND_FROM_EMAIL` | `""` | Sender address for the feedback email notification, e.g. `RGBlitz <feedback@yourdomain>` |
+| `FEEDBACK_NOTIFY_EMAIL` | `""` | Recipient address for the feedback email notification |

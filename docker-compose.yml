@@ -4,6 +4,9 @@ services:
     restart: unless-stopped
     environment:
       TZ: Europe/Berlin
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      FEEDBACK_NOTIFY_EMAIL: ${FEEDBACK_NOTIFY_EMAIL:-}
     volumes:
       - backend_data:/app/data
       - backend_cache:/app/cache/images
