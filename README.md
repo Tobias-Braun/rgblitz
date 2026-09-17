@@ -33,7 +33,7 @@ From the same public pages anyone can already see on Roundnet Germany's `playerz
 A few likely reasons: tournaments only happen on Saturdays and Sundays, so any other day will correctly show "no tournament." Your name also needs to be in the weekly-refreshed player list — if you're brand new to the league, it can take up to a week to appear. If something looks wrong during an active tournament weekend, please [open an issue](../../issues/new/choose) — see below.
 
 **Is my data safe / private?**
-RGBlitz doesn't collect or store anything about *you* as a visitor — no accounts, no cookies, no analytics. It only displays information (name, club, rating) that's already publicly visible on playerzone for any competitive player.
+RGBlitz doesn't have accounts, and the only information it displays about *you* (name, club, rating) is already publicly visible on playerzone for any competitive player. Visitor traffic is measured with a self-hosted [Umami](https://umami.is) instance — cookie-free, no cross-site tracking, no personal data collected — used only to see aggregate page-view counts.
 
 **I found a bug, or want a feature added — what do I do?**
 Please [open an issue](../../issues/new/choose)! Bug report and feature request templates are set up to make this quick — just pick the one that fits and fill in the blanks. Pull requests are welcome too.

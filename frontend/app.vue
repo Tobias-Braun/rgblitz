@@ -1,3 +1,13 @@
+<script setup lang="ts">
+const { umamiScriptUrl, umamiWebsiteId } = useRuntimeConfig().public
+
+if (umamiScriptUrl && umamiWebsiteId) {
+  useHead({
+    script: [{ src: umamiScriptUrl, 'data-website-id': umamiWebsiteId, defer: true }],
+  })
+}
+</script>
+
 <template>
   <div class="app-shell">
     <NuxtPage />

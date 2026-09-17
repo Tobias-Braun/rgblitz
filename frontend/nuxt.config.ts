@@ -26,6 +26,10 @@ export default defineNuxtConfig({
       // Base URL of the Go backend. Read server-side (SSR fetch) and exposed
       // to the browser (client-side polling after hydration) — see docs/06-api-spec.md.
       apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:8080',
+      // Self-hosted Umami — cookie-free, so no consent banner is required.
+      // Left empty in local dev; app.vue skips the tracker script when unset.
+      umamiScriptUrl: process.env.NUXT_PUBLIC_UMAMI_SCRIPT_URL || '',
+      umamiWebsiteId: process.env.NUXT_PUBLIC_UMAMI_WEBSITE_ID || '',
     },
   },
 
