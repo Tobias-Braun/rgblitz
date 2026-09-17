@@ -58,7 +58,7 @@ The project is in **active/alpha development** — see the in-app notice for the
 | Frontend | Vue 3 + Nuxt (SSR), no UI/animation libraries |
 | Backend | Go, `chi` router, SQLite (`modernc.org/sqlite`), no external database server |
 | Data source | HTML scraping of `playerzone.roundnetgermany.de` — there's no official API |
-| Deployment | Docker Compose: backend + frontend + Caddy reverse proxy |
+| Deployment | Docker images pushed to GHCR; run via `docker compose` from the separate `vps-infra` repo alongside Caddy |
 
 For the full technical breakdown — architecture, RGX formula, scraping algorithm, API contract, and UI state machine — see the [`docs/`](docs/) folder:
 
@@ -114,14 +114,7 @@ npm run dev
 
 Nuxt runs on `:3000` and expects the Go API at `http://localhost:8080` by default (`frontend/.env`).
 
-**Full stack via Docker Compose:**
-
-```sh
-cp .env.example .env   # then edit DOMAIN / NUXT_PUBLIC_API_BASE
-docker compose up -d
-```
-
-See `docker-compose.yml` and `Caddyfile` for the production reverse-proxy setup.
+**Production:** this repo's CI (`docker-publish.yml`) only builds and pushes the `backend` and `frontend` images to GHCR. The `docker-compose.yml` that runs them, plus the Caddy reverse proxy and TLS termination for `rgblitz.tobi-braun.com`, live in a separate `vps-infra` repo (sibling to this one) that's cloned directly onto the VPS.
 
 ### Running the tests
 
