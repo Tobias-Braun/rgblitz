@@ -26,12 +26,33 @@
       </section>
 
       <section class="entry">
-        <h2 class="question">2. Kein Tracking, keine Cookies</h2>
+        <h2 class="question">2. Reichweitenmessung mit Umami</h2>
         <p class="answer">
-          RGBlitz setzt keinerlei Analyse-, Tracking- oder Werbe-Tools ein –
-          weder eigene noch von Drittanbietern. Es werden keine Cookies
-          gesetzt, keine Nutzungsprofile erstellt und kein Verhalten über
-          mehrere Besuche hinweg nachverfolgt.
+          Zur anonymen statistischen Auswertung der Zugriffe auf RGBlitz wird
+          Umami eingesetzt – eine selbst gehostete, quelloffene
+          Analyse-Software, die auf einem eigenen Server betrieben wird. Es
+          findet keine Datenübermittlung an Dritte oder an Umami als
+          Unternehmen statt.
+        </p>
+        <p class="answer">
+          Umami setzt keine Cookies und verwendet keine dauerhaften
+          Identifikatoren. Erfasst werden lediglich aggregierte,
+          anonymisierte Zugriffsdaten wie aufgerufene Seite, Referrer,
+          Browser, Betriebssystem, Gerätetyp, Bildschirmauflösung und Land.
+          Deine IP-Adresse wird dabei nicht gespeichert: Sie fließt lediglich
+          kurzzeitig zusammen mit einem täglich wechselnden Zufallswert in
+          eine Einweg-Hashfunktion ein, um Mehrfachbesuche innerhalb eines
+          Tages zu erkennen, ohne dass daraus ein Personenbezug oder eine
+          Nachverfolgung über mehrere Tage oder Seiten hinweg möglich ist. Es
+          werden keine Nutzungsprofile erstellt und kein Verhalten
+          geräte- oder seitenübergreifend nachverfolgt.
+        </p>
+        <p class="answer">
+          Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes
+          Interesse an der Analyse der Nutzung meines Angebots, um es zu
+          verstehen und zu verbessern). Da keine Cookies gesetzt und keine
+          personenbezogenen Profile gebildet werden, ist keine Einwilligung
+          nach § 25 TTDSG erforderlich.
         </p>
       </section>
 
@@ -144,7 +165,7 @@
       <section class="entry">
         <h2 class="question">9. Aktualität dieser Datenschutzerklärung</h2>
         <p class="answer">
-          Stand: August 2026. Diese Datenschutzerklärung kann bei Bedarf
+          Stand: September 2026. Diese Datenschutzerklärung kann bei Bedarf
           angepasst werden, um rechtlichen Anforderungen oder Änderungen am
           Dienst zu entsprechen.
         </p>
