@@ -27,6 +27,11 @@ jobs:
         id: owner
         run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
+      - name: Compute Flux image tag
+        id: fluxtag
+        # The commit timestamp (not the build time) keeps the tag identical across matrix jobs and reruns, and sortable by commit order.
+        run: echo "tag=$(git show -s --format=%ct HEAD)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
@@ -48,6 +53,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ steps.fluxtag.outputs.tag }},enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
