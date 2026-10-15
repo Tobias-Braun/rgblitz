@@ -1,19 +1,21 @@
 <!--
-  Start page list of tournaments that haven't started yet. Rendered only once
-  entries are known — loading, errors and an empty list leave no trace.
+  Tournaments that haven't started yet, shown below the focused search bar
+  until the user types. Styled like the autocomplete list it gives way to.
 -->
 <script setup lang="ts">
-import { useUpcomingTournaments } from "~/composables/useUpcomingTournaments";
+import type { UpcomingTournament } from "~/types/api";
 import { formatDateRange } from "~/utils/format";
 
-const { data: tournaments } = useUpcomingTournaments();
+defineProps<{
+  tournaments: UpcomingTournament[];
+}>();
 </script>
 
 <template>
-  <section v-if="tournaments?.length" class="upcoming">
+  <section>
     <h2 class="heading">Kommende Turniere</h2>
     <ul class="list">
-      <li v-for="t in tournaments" :key="t.id">
+      <li v-for="(t, i) in tournaments" :key="t.id" :style="{ '--i': i }">
         <a
           class="row"
           :href="`https://playerzone.roundnetgermany.de/tournaments/${t.id}`"
@@ -22,8 +24,8 @@ const { data: tournaments } = useUpcomingTournaments();
         >
           <span class="name">{{ t.name }}</span>
           <span class="meta">
-            <span class="date">{{ formatDateRange(t.start_date, t.end_date) }}</span>
-            <span v-if="t.location">· {{ t.location }}</span>
+            {{ formatDateRange(t.start_date, t.end_date) }}
+            <template v-if="t.location"> · {{ t.location }}</template>
           </span>
         </a>
       </li>
@@ -32,64 +34,57 @@ const { data: tournaments } = useUpcomingTournaments();
 </template>
 
 <style scoped>
-.upcoming {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: var(--page-container-max-width);
-  margin: 0 auto;
-  padding-bottom: 24px;
-}
-
 .heading {
   margin: 0;
-  padding: 0 18px 12px;
-  font: 400 12px/1.5 var(--font-mono);
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  padding: 8px 20px 4px;
+  font: 400 11px/1.4 var(--font-mono);
+  color: var(--text-muted);
 }
 
 .list {
   list-style: none;
   margin: 0;
   padding: 0;
-  border-top: 1px solid var(--border);
 }
 
 .list li {
-  border-bottom: 1px solid var(--border);
+  animation: fade-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
 }
 
 .row {
+  min-height: 44px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 14px 18px;
-  color: inherit;
+  justify-content: center;
+  padding: 11px 20px;
   text-decoration: none;
 }
 
-.row:hover,
-.row:focus-visible {
-  background: rgba(255, 255, 255, 0.04);
-}
-
 .name {
-  font: 600 16px/1.3 var(--font-display);
+  font: 500 15px/1.25 var(--font-body);
   color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  font: 400 14px/1.4 var(--font-body);
+  font: 400 12px/1.3 var(--font-body);
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.date {
-  font-family: var(--font-mono);
-  font-size: 13px;
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

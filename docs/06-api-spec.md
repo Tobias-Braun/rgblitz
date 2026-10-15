@@ -281,7 +281,7 @@ Counts only real, production-created jobs — cache hits (an in-flight or still-
 
 ### `GET /api/tournaments/upcoming`
 
-Tournaments that haven't started yet, scraped from playerzone's `/tournaments/upcoming` page and sorted by `start_date`. Includes every tournament on that page, GRT or not. Powers the start page list (`UpcomingTournaments.vue`).
+Tournaments that haven't started yet, scraped from playerzone's `/tournaments/upcoming` page and sorted by `start_date`. Includes every tournament on that page, GRT or not. Powers the list under the focused search bar (`UpcomingTournaments.vue`).
 
 The result is cached in memory for 1 hour; concurrent cache misses share a single playerzone request. Only tournaments with a full date range and `end_date` today or later are returned — the page's navigation dropdown also links tournaments that are already running, and those are left out.
 

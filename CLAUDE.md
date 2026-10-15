@@ -165,12 +165,12 @@ components/
   ResultLoading.vue         # job queued/running, shows queue-position phrase
   ResultStale.vue           # retry vs. accept-stale-result (see production gap note above)
   ResultError.vue           # hard failure, no cached fallback
-  UpcomingTournaments.vue   # start page list of not-yet-started tournaments, rows link to playerzone
+  UpcomingTournaments.vue   # not-yet-started tournaments under the focused, still-empty search bar
 composables/
   useBattery.ts       # wraps navigator.getBattery() + prefers-reduced-motion, exposes isFastMode
   useTodayResult.ts   # drives job-create → poll-every-2s-until-final-status flow
   useRgxJobStats.ts   # non-blocking (lazy) fetch of /api/stats/rgx-jobs for the footer's served-count stat
-  useUpcomingTournaments.ts # non-blocking (lazy) fetch of /api/tournaments/upcoming for the start page list
+  useUpcomingTournaments.ts # non-blocking (lazy) fetch of /api/tournaments/upcoming, rendered by UpcomingTournaments.vue
 config/
   mood-phrases.ts     # RGX-delta bracket → German phrase map
   queue-phrases.ts    # queue-position bracket → German phrase map
