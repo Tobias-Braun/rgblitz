@@ -14,6 +14,7 @@ The `docs/` folder is the spec of record for behaviour not covered below — it'
 | `docs/04-architecture.md`       | Component tree, Go package layout, data flow sequences                    |
 | `docs/05-scraping-algorithm.md` | Step-by-step scraping pseudocode, rate limiting, new-player proxy logic   |
 | `docs/06-api-spec.md`           | Full REST API contract with request/response shapes and polling behaviour |
+| `docs/07-analytics.md`          | Umami events, session properties, privacy rule for tracked data           |
 
 ## Tech stack
 
@@ -170,9 +171,10 @@ composables/
   useBattery.ts       # wraps navigator.getBattery() + prefers-reduced-motion, exposes isFastMode
   useTodayResult.ts   # drives job-create → poll-every-2s-until-final-status flow
   useRgxJobStats.ts   # non-blocking (lazy) fetch of /api/stats/rgx-jobs for the footer's served-count stat
+  useTrack.ts         # no-op-safe Umami track/identify wrapper (events: docs/07-analytics.md)
+  useUpcomingTournaments.ts # non-blocking (lazy) fetch of /api/tournaments/upcoming, rendered by UpcomingTournaments.vue
 utils/
   changelog.ts        # app version + visible releases from changelog.json
-  useUpcomingTournaments.ts # non-blocking (lazy) fetch of /api/tournaments/upcoming, rendered by UpcomingTournaments.vue
 config/
   mood-phrases.ts     # RGX-delta bracket → German phrase map
   queue-phrases.ts    # queue-position bracket → German phrase map
