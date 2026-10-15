@@ -30,6 +30,12 @@
 - Minimum 2 characters before suggestions appear
 - On **no match**: show inline message "Kein Spieler gefunden"
 
+**Upcoming tournaments list** (`UpcomingTournaments.vue`)
+- Below the hero, under the heading "Kommende Turniere". The hero fills the first screen except for a strip where this heading peeks in; the idle view scrolls to reveal the list
+- Full-width rows, one per tournament from `GET /api/tournaments/upcoming`: name, then date range (e.g. "25.–26.07.2026") · location
+- Each row opens the tournament on playerzone (`/tournaments/{id}`) in a new tab
+- Hidden while the search bar is focused. Not rendered while loading, on error, or when the list is empty — the hero never moves because of it
+
 **Transition to result state**
 - User taps/clicks an autocomplete suggestion
 - Bar collapses, page transitions to State 2 or State 3

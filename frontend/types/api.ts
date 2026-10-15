@@ -89,6 +89,15 @@ export interface RgxJobStats {
   failed: number;
 }
 
+// GET /api/tournaments/upcoming — soonest first. Dates are YYYY-MM-DD.
+export interface UpcomingTournament {
+  id: number;
+  name: string;
+  location: string;
+  start_date: string;
+  end_date: string;
+}
+
 // POST /api/feedback
 export interface FeedbackRequest {
   rating: number;

@@ -138,45 +138,48 @@ async function focusInput() {
       <button type="button" class="cancel" @click="cancel">Abbr.</button>
     </div>
 
-    <div v-else class="hero">
-      <div class="hero-copy">
-        <span v-if="servedText" class="served-chip">
-          <span class="served-dot" />
-          <b>{{ servedText }}</b> Anfragen beantwortet
-        </span>
-        <h1>Dein RGX,<br />noch auf dem Feld.</h1>
-        <p>
-          Such deinen Namen und sieh sofort, wie viele Punkte du heute geholt
-          oder verloren hast. Spiel für Spiel, live vom Turnier.
-        </p>
+    <div v-else class="idle">
+      <div class="hero">
+        <div class="hero-copy">
+          <span v-if="servedText" class="served-chip">
+            <span class="served-dot" />
+            <b>{{ servedText }}</b> Anfragen beantwortet
+          </span>
+          <h1>Dein RGX,<br />noch auf dem Feld.</h1>
+          <p>
+            Such deinen Namen und sieh sofort, wie viele Punkte du heute geholt
+            oder verloren hast. Spiel für Spiel, live vom Turnier.
+          </p>
+        </div>
+        <button type="button" class="bar bar--idle" @click="focusInput">
+          <svg
+            class="magnifier"
+            viewBox="0 0 20 20"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="8.5"
+              cy="8.5"
+              r="6"
+              stroke="currentColor"
+              stroke-width="1.6"
+            />
+            <line
+              x1="13.1"
+              y1="13.1"
+              x2="17.5"
+              y2="17.5"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          <span class="placeholder">Spieler:in suchen…</span>
+        </button>
+        <p class="hint">nur an Turniertagen · Sa &amp; So</p>
       </div>
-      <button type="button" class="bar bar--idle" @click="focusInput">
-        <svg
-          class="magnifier"
-          viewBox="0 0 20 20"
-          fill="none"
-          aria-hidden="true"
-        >
-          <circle
-            cx="8.5"
-            cy="8.5"
-            r="6"
-            stroke="currentColor"
-            stroke-width="1.6"
-          />
-          <line
-            x1="13.1"
-            y1="13.1"
-            x2="17.5"
-            y2="17.5"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
-          />
-        </svg>
-        <span class="placeholder">Spieler:in suchen…</span>
-      </button>
-      <p class="hint">nur an Turniertagen · Sa &amp; So</p>
+      <UpcomingTournaments />
     </div>
 
     <div v-if="isFocused" class="results">
@@ -341,16 +344,31 @@ async function focusInput() {
   z-index: 2;
 }
 
-.hero {
+.idle {
   position: relative;
   z-index: 1;
   flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/*
+ * The hero fills the first screen except for a 44px strip where the heading
+ * of the upcoming tournaments list peeks in. Its height doesn't depend on
+ * whether that list has loaded, so the hero never jumps.
+ */
+.hero {
+  flex: none;
+  min-height: calc(100% - 44px);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   gap: 34px;
-  padding: 0 30px 70px;
+  padding: 0 30px 26px;
 }
 
 .hero-copy {
