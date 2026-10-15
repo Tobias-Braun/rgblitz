@@ -11,6 +11,7 @@ import { computed } from "vue";
 import { useRgxJobStats } from "~/composables/useRgxJobStats";
 import { useUpcomingTournaments } from "~/composables/useUpcomingTournaments";
 import { formatCompactCount } from "~/utils/format";
+import { useTrack } from "~/composables/useTrack";
 
 const emit = defineEmits<{
   select: [player: PlayerSummary];
@@ -32,6 +33,7 @@ const servedText = computed(() => {
 });
 
 const { isFastMode } = useBattery();
+const { track } = useTrack();
 const config = useRuntimeConfig();
 
 const inputEl = ref<HTMLInputElement | null>(null);
@@ -60,6 +62,8 @@ watch(query, (value) => {
         baseURL: config.public.apiBase,
         params: { q: trimmed },
       });
+      if (results.value.length === 0)
+        track("search-no-results", { query_len: trimmed.length });
     } catch {
       results.value = [];
     } finally {
@@ -77,7 +81,8 @@ function cancel() {
   inputEl.value?.blur();
 }
 
-function selectPlayer(player: PlayerSummary) {
+function selectPlayer(player: PlayerSummary, rank: number) {
+  track("player-select", { rank, query_len: query.value.trim().length });
   emit("select", player);
 }
 
@@ -140,7 +145,12 @@ async function focusInput() {
           autocomplete="off"
         />
       </label>
-      <button type="button" class="cancel" @click="cancel">Abbr.</button>
+      <button
+        type="button"
+        class="cancel"
+        data-umami-event="search-cancel"
+        @click="cancel"
+      >Abbr.</button>
     </div>
 
     <div v-else class="hero">
@@ -207,7 +217,10 @@ async function focusInput() {
             :key="player.id"
             :style="{ '--i': i }"
           >
-            <AutocompleteItem :player="player" @select="selectPlayer" />
+            <AutocompleteItem
+              :player="player"
+              @select="selectPlayer($event, i + 1)"
+            />
           </li>
         </ul>
         <p class="footnote">max. 10 Treffer · nach RGX sortiert</p>

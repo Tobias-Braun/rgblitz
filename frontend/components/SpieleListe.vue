@@ -2,15 +2,18 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Game } from '~/types/api'
+import { useTrack } from '~/composables/useTrack'
 
 const props = defineProps<{
   games: Game[]
 }>()
 
 const isOpen = ref(false)
+const { track } = useTrack()
 
 function toggle() {
   isOpen.value = !isOpen.value
+  if (isOpen.value) track('games-expand')
 }
 </script>
 

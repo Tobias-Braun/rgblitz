@@ -4,6 +4,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { ApiError, FeedbackRequest, FeedbackResponse } from "~/types/api";
+import { useTrack } from "~/composables/useTrack";
 
 const emit = defineEmits<{
   done: [];
@@ -16,6 +17,7 @@ const submitted = ref(false);
 const errorMsg = ref("");
 
 const config = useRuntimeConfig();
+const { track } = useTrack();
 
 async function submit() {
   if (rating.value < 1 || submitting.value) return;
@@ -31,6 +33,7 @@ async function submit() {
       } satisfies FeedbackRequest,
     });
     submitted.value = true;
+    track("feedback-submit", { rating: rating.value });
   } catch (err) {
     const apiError = err as { data?: ApiError };
     errorMsg.value =

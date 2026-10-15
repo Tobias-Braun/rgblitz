@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import type { TodayResultOk } from "~/types/api";
+import { useTrack } from "~/composables/useTrack";
 
 const props = defineProps<{
   result: TodayResultOk;
@@ -83,6 +84,12 @@ const competitionVerdict = computed(() => {
 });
 
 const isVerdictExpanded = ref(false);
+const { track } = useTrack();
+
+function toggleVerdict() {
+  isVerdictExpanded.value = !isVerdictExpanded.value;
+  if (isVerdictExpanded.value) track("verdict-expand");
+}
 
 const timeFormatter = new Intl.DateTimeFormat("de-DE", {
   hour: "2-digit",
@@ -135,7 +142,7 @@ const jobFinishedAtLabel = computed(() => {
         type="button"
         class="verdict-trigger"
         :class="`verdict-${competitionVerdict.color}`"
-        @click="isVerdictExpanded = !isVerdictExpanded"
+        @click="toggleVerdict"
         :aria-expanded="isVerdictExpanded"
       >
         <span class="icon">{{ competitionVerdict.icon }}</span>
@@ -152,7 +159,12 @@ const jobFinishedAtLabel = computed(() => {
       * Gegner-RGX geschätzt (neuer Spieler:in ohne Turnierhistorie)
     </p>
 
-    <button type="button" class="feedback-cta" @click="emit('feedback')">
+    <button
+      type="button"
+      class="feedback-cta"
+      data-umami-event="feedback-open"
+      @click="emit('feedback')"
+    >
       Feedback geben
     </button>
   </div>
