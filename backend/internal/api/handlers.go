@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -49,6 +50,7 @@ type Handler struct {
 	queue       *jobqueue.Queue
 	feedback    *db.FeedbackStore
 	notifier    FeedbackNotifier
+	upcomingMu  sync.Mutex
 
 	// Now returns the current time; defaults to time.Now. Overridable in tests so the
 	// weekday/time-window guard in TodayResult can be exercised deterministically.

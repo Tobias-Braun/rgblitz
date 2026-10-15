@@ -279,6 +279,34 @@ Counts only real, production-created jobs — cache hits (an in-flight or still-
 
 ---
 
+### `GET /api/tournaments/upcoming`
+
+Tournaments that haven't started yet, scraped from playerzone's `/tournaments/upcoming` page and sorted by `start_date`. Includes every tournament on that page, GRT or not. Powers the list under the focused search bar (`UpcomingTournaments.vue`).
+
+The result is cached in memory for 1 hour; concurrent cache misses share a single playerzone request. Only tournaments with a full date range and `end_date` today or later are returned — the page's navigation dropdown also links tournaments that are already running, and those are left out.
+
+**Response `200 OK`**
+
+```json
+[
+  {
+    "id": 614,
+    "name": "Masters Kiel 2026",
+    "location": "Kiel",
+    "start_date": "2026-07-25",
+    "end_date": "2026-07-26"
+  }
+]
+```
+
+- Dates are `YYYY-MM-DD`; `end_date` equals `start_date` for a single-day tournament
+- `https://playerzone.roundnetgermany.de/tournaments/{id}` redirects to the tournament's page
+- Returns an empty array `[]`, never `null`. Also `[]` (without any playerzone request) when `RESPECT_PERMISSION=true` and scraping is not permitted
+
+**Response `502`** — playerzone fetch failed or the page could not be parsed
+
+---
+
 ## Response Field Reference
 
 | Field | Type | Description |

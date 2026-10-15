@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatCompactCount } from "./format";
+import { formatCompactCount, formatDateRange } from "./format";
 
 describe("formatCompactCount", () => {
   it("renders sub-1000 values exactly", () => {
@@ -34,5 +34,17 @@ describe("formatCompactCount", () => {
     for (const n of [1, 999, 1000, 1074, 9999, 12_345, 999_500, 999_999, 1_000_000, 25_000_000, 2_000_000_000]) {
       expect(formatCompactCount(n).length).toBeLessThanOrEqual(4);
     }
+  });
+});
+
+describe("formatDateRange", () => {
+  it("renders a single day as a full date", () => {
+    expect(formatDateRange("2026-07-25", "2026-07-25")).toBe("25.07.2026");
+  });
+
+  it("states month and year once when both ends share them", () => {
+    expect(formatDateRange("2026-07-25", "2026-07-26")).toBe("25.–26.07.2026");
+    expect(formatDateRange("2026-07-31", "2026-08-01")).toBe("31.07.–01.08.2026");
+    expect(formatDateRange("2026-12-31", "2027-01-01")).toBe("31.12.2026–01.01.2027");
   });
 });

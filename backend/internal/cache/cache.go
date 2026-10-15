@@ -15,6 +15,7 @@ const (
 	TTLPlayerProfile               = 10 * time.Minute
 	TTLPlayerProfileWithTournament = 6 * time.Hour
 	TTLImageDisk                   = 7 * 24 * time.Hour
+	TTLUpcomingTournaments         = time.Hour
 )
 
 type Cache struct {
