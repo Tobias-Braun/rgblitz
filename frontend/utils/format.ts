@@ -62,6 +62,18 @@ export function formatCompactCount(n: number): string {
   return `${display}${units[unitIndex]}`
 }
 
+// Renders a YYYY-MM-DD range as a German date, stating the month and year only
+// once when both ends share them: "25.–26.07.2026", "31.07.–01.08.2026".
+export function formatDateRange(start: string, end: string): string {
+  const [sy, sm, sd] = start.split('-')
+  const [ey, em, ed] = end.split('-')
+  const endText = `${ed}.${em}.${ey}`
+  if (start === end) return endText
+  if (sy !== ey) return `${sd}.${sm}.${sy}–${endText}`
+  if (sm !== em) return `${sd}.${sm}.–${endText}`
+  return `${sd}.–${endText}`
+}
+
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (parts.length === 0) return ''

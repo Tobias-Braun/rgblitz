@@ -8,6 +8,9 @@ const props = defineProps<{
   game: Game;
 }>();
 
+// The API has sent `sets: null` before (#11); that must not break the whole result view.
+const sets = computed(() => props.game.sets ?? []);
+
 const tone = computed(() =>
   props.game.was_cancelled
     ? "neutral"
@@ -28,10 +31,10 @@ const tone = computed(() =>
       }}</span>
       <div class="details">
         <span class="opponent">{{ game.opponent_name }}</span>
-        <span v-if="game.was_cancelled || game.sets.length" class="meta">
+        <span v-if="game.was_cancelled || sets.length" class="meta">
           <span v-if="game.was_cancelled">Abgesagt</span>
-          <span v-if="game.sets.length" class="chips">
-            <span v-for="(set, index) in game.sets" :key="index" class="chip">
+          <span v-if="sets.length" class="chips">
+            <span v-for="(set, index) in sets" :key="index" class="chip">
               {{ set.our_score }}:{{ set.opponent_score }}
             </span>
           </span>

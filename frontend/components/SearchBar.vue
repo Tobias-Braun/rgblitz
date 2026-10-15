@@ -9,6 +9,7 @@ import type { PlayerSummary } from "~/types/api";
 import { useBattery } from "~/composables/useBattery";
 import { computed } from "vue";
 import { useRgxJobStats } from "~/composables/useRgxJobStats";
+import { useUpcomingTournaments } from "~/composables/useUpcomingTournaments";
 import { formatCompactCount } from "~/utils/format";
 import { useTrack } from "~/composables/useTrack";
 
@@ -17,6 +18,10 @@ const emit = defineEmits<{
 }>();
 
 const { data: stats } = useRgxJobStats();
+
+// Fetched with the page rather than on focus, so the list is already there
+// the moment the search bar opens.
+const { data: upcoming } = useUpcomingTournaments();
 
 // Rendered only once the count is known — never a placeholder/loading state,
 // so a slow or failed fetch just means the chip stays absent.
@@ -220,6 +225,10 @@ async function focusInput() {
         </ul>
         <p class="footnote">max. 10 Treffer · nach RGX sortiert</p>
       </template>
+      <UpcomingTournaments
+        v-else-if="query.trim().length < 2 && upcoming?.length"
+        :tournaments="upcoming"
+      />
     </div>
   </div>
 </template>
