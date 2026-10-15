@@ -212,7 +212,25 @@ func TestTodayResult_DevMode(t *testing.T) {
 		t.Fatalf("status = %q, want %q (dev mode should always synthesize a result immediately)", resp.Status, "done")
 	}
 	if resp.Result == nil || resp.Result.Status != "ok" {
-		t.Errorf("result = %+v, want status %q", resp.Result, "ok")
+		t.Fatalf("result = %+v, want status %q", resp.Result, "ok")
+	}
+
+	// The frontend reads game.sets.length, so a nil slice serialized as null breaks rendering.
+	var raw struct {
+		Result struct {
+			Games []map[string]json.RawMessage `json:"games"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &raw); err != nil {
+		t.Fatalf("decode raw: %v", err)
+	}
+	if len(raw.Result.Games) == 0 {
+		t.Fatal("expected synthesized games")
+	}
+	for i, g := range raw.Result.Games {
+		if !strings.HasPrefix(string(g["sets"]), "[") {
+			t.Errorf("games[%d].sets = %s, want a JSON array", i, g["sets"])
+		}
 	}
 }
 
