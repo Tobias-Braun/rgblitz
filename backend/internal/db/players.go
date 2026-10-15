@@ -139,3 +139,15 @@ func (s *PlayerStore) RandomPlayers(excludeID string, n int) ([]Player, error) {
 	}
 	return players, rows.Err()
 }
+
+// NewestScrapedAt returns the most recent scraped_at in the index, or the zero
+// time if the index is empty. Ordering by the column (instead of MAX()) keeps
+// its DATETIME type, so the driver still decodes it as a time.Time.
+func (s *PlayerStore) NewestScrapedAt() (time.Time, error) {
+	var t time.Time
+	err := s.db.QueryRow(`SELECT scraped_at FROM players ORDER BY scraped_at DESC LIMIT 1`).Scan(&t)
+	if err == sql.ErrNoRows {
+		return time.Time{}, nil
+	}
+	return t, err
+}

@@ -85,3 +85,10 @@ func (s *JobStatsStore) Totals() (JobStatsTotals, error) {
 	}
 	return t, nil
 }
+
+// UniquePlayers counts the distinct players any job was ever created for.
+func (s *JobStatsStore) UniquePlayers() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(DISTINCT player_id) FROM rgx_jobs_stats`).Scan(&n)
+	return n, err
+}

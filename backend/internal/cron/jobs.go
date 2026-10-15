@@ -2,12 +2,13 @@ package cron
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	robfigcron "github.com/robfig/cron/v3"
 
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/metrics"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
@@ -30,7 +31,7 @@ func NewScheduler(ps *db.PlayerStore, jobs *db.JobStore, fetcher scraper.Fetcher
 	// Recover wraps every registered job: an unrecovered panic in a cron
 	// job's goroutine would otherwise crash the whole process, same as an
 	// unrecovered panic in the jobqueue worker (see internal/jobqueue.Queue.process).
-	c := robfigcron.New(robfigcron.WithLocation(loc), robfigcron.WithChain(robfigcron.Recover(robfigcron.DefaultLogger)))
+	c := robfigcron.New(robfigcron.WithLocation(loc), robfigcron.WithChain(robfigcron.Recover(cronLogger())))
 	return &Scheduler{c: c, players: ps, jobs: jobs, fetcher: fetcher, permissions: permissions, respectPermission: respectPermission}
 }
 
@@ -44,30 +45,30 @@ func NewScheduler(ps *db.PlayerStore, jobs *db.JobStore, fetcher scraper.Fetcher
 // together.
 func (s *Scheduler) Start() {
 	_, err := s.c.AddFunc("0 3 * * 6,0", func() {
-		log.Println("cron: starting player index scrape")
+		slog.Info("cron: starting player index scrape")
 		if err := s.scrapePlayerIndex(); err != nil {
-			log.Printf("cron: scrape failed: %v", err)
+			slog.Error("cron: scrape failed", "error", err)
 		}
 	})
 	if err != nil {
-		log.Printf("cron: failed to register scrape job: %v", err)
+		slog.Error("cron: failed to register scrape job", "error", err)
 		return
 	}
 
 	_, err = s.c.AddFunc("0 3 * * *", func() {
 		if err := s.jobs.DeleteAll(); err != nil {
-			log.Printf("cron: rgx_jobs cleanup failed: %v", err)
+			slog.Error("cron: rgx_jobs cleanup failed", "error", err)
 			return
 		}
-		log.Println("cron: rgx_jobs cleanup complete")
+		slog.Info("cron: rgx_jobs cleanup complete")
 	})
 	if err != nil {
-		log.Printf("cron: failed to register rgx_jobs cleanup job: %v", err)
+		slog.Error("cron: failed to register rgx_jobs cleanup job", "error", err)
 		return
 	}
 
 	s.c.Start()
-	log.Println("cron: scheduler started (player index scrape every Saturday and Sunday 03:00 CET, daily rgx_jobs cleanup at 03:00 CET)")
+	slog.Info("cron: scheduler started (player index scrape every Saturday and Sunday 03:00 CET, daily rgx_jobs cleanup at 03:00 CET)")
 }
 
 func (s *Scheduler) Stop() {
@@ -79,7 +80,19 @@ func (s *Scheduler) ScrapeNow() error {
 	return s.scrapePlayerIndex()
 }
 
+// scrapePlayerIndex records every run in the index scrape metrics. outcome
+// starts as "error" so a panic (recovered by the cron chain) counts as one.
 func (s *Scheduler) scrapePlayerIndex() error {
+	start := time.Now()
+	outcome := "error"
+	defer func() {
+		metrics.IndexScrapeRuns.WithLabelValues(outcome).Inc()
+		metrics.IndexScrapeDuration.Set(time.Since(start).Seconds())
+		if outcome == "ok" {
+			metrics.IndexLastSuccess.SetToCurrentTime()
+		}
+	}()
+
 	if s.respectPermission {
 		allowed, err := scraper.CheckPermission(s.fetcher, scraper.DefaultUserAgent, scraper.RequiredScrapePaths)
 		if err != nil {
@@ -87,11 +100,12 @@ func (s *Scheduler) scrapePlayerIndex() error {
 		}
 		if s.permissions != nil {
 			if err := s.permissions.Set(allowed, time.Now()); err != nil {
-				log.Printf("cron: store scrape permission: %v", err)
+				slog.Error("cron: store scrape permission", "error", err)
 			}
 		}
 		if !allowed {
-			log.Println("cron: robots.txt disallows RGBlitzBot for one or more required paths — skipping scrape, no requests made")
+			slog.Warn("cron: robots.txt disallows RGBlitzBot for one or more required paths — skipping scrape, no requests made")
+			outcome = "robots_denied"
 			return nil
 		}
 	}
@@ -106,7 +120,7 @@ func (s *Scheduler) scrapePlayerIndex() error {
 	// the whole scrape.
 	women, err := scraper.FetchRankingPage(s.fetcher, scraper.RankingWomenPath)
 	if err != nil {
-		log.Printf("cron: women ranking fetch failed, indexing Open RGX only: %v", err)
+		slog.Warn("cron: women ranking fetch failed, indexing Open RGX only", "error", err)
 		women = nil
 	}
 
@@ -116,7 +130,7 @@ func (s *Scheduler) scrapePlayerIndex() error {
 	for _, p := range players {
 		existing, _ := s.players.GetByID(p.ID)
 		if err := s.players.Upsert(p); err != nil {
-			log.Printf("cron: upsert player %s: %v", p.ID, err)
+			slog.Error("cron: upsert player", "player_id", p.ID, "error", err)
 			errs++
 			continue
 		}
@@ -126,6 +140,13 @@ func (s *Scheduler) scrapePlayerIndex() error {
 			updated++
 		}
 	}
-	log.Printf("cron: player index scrape complete — %d updated, %d added, %d errors", updated, added, errs)
+	slog.Info("cron: player index scrape complete", "updated", updated, "added", added, "errors", errs)
+	outcome = "ok"
 	return nil
+}
+
+// cronLogger routes robfig/cron's own messages (e.g. recovered panics) into
+// slog at error level, so they're JSON like every other log line.
+func cronLogger() robfigcron.Logger {
+	return robfigcron.PrintfLogger(slog.NewLogLogger(slog.Default().Handler(), slog.LevelError))
 }

@@ -19,9 +19,10 @@ COPY --from=builder /rgx-server /app/rgx-server
 
 ENV TZ=Europe/Berlin \
     PORT=8080 \
+    METRICS_PORT=9090 \
     DB_PATH=/app/data/players.db \
     IMAGE_CACHE_DIR=/app/cache/images
 
-EXPOSE 8080
+EXPOSE 8080 9090
 
 ENTRYPOINT ["/app/rgx-server"]

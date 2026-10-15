@@ -4,18 +4,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-)
+	"time"
 
-// ansiBrightYellow/ansiReset color the "Request to PZ" log line so live
-// playerzone traffic stands out from other log output in the terminal.
-const (
-	ansiBrightYellow = "\033[93m"
-	ansiReset        = "\033[0m"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/metrics"
 )
 
 // Fetcher retrieves the raw HTML body for a playerzone URL path (e.g. "/ranking/rg-index/").
@@ -52,9 +49,7 @@ func NewHTTPFetcher(rl *RateLimiter) *HTTPFetcher {
 
 func (f *HTTPFetcher) Fetch(path string) (io.ReadCloser, error) {
 	f.RL.Wait()
-	url := f.BaseURL + path
-	log.Printf("%sRequest to PZ: %s%s", ansiBrightYellow, url, ansiReset)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, f.BaseURL+path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +58,9 @@ func (f *HTTPFetcher) Fetch(path string) (io.ReadCloser, error) {
 		ua = DefaultUserAgent
 	}
 	req.Header.Set("User-Agent", ua)
+	start := time.Now()
 	resp, err := f.Client.Do(req)
+	observePlayerzoneRequest(path, resp, time.Since(start))
 	if err != nil {
 		return nil, err
 	}
@@ -72,6 +69,27 @@ func (f *HTTPFetcher) Fetch(path string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("playerzone returned %d for %s", resp.StatusCode, path)
 	}
 	return resp.Body, nil
+}
+
+func observePlayerzoneRequest(path string, resp *http.Response, elapsed time.Duration) {
+	page := pageLabel(path)
+	status := "error"
+	if resp != nil {
+		status = strconv.Itoa(resp.StatusCode)
+	}
+	metrics.PlayerzoneRequests.WithLabelValues(page, status).Inc()
+	metrics.PlayerzoneDuration.WithLabelValues(page).Observe(elapsed.Seconds())
+	slog.Info("playerzone request", "page", page, "path", path, "status", status, "duration_seconds", elapsed.Seconds())
+}
+
+// pageLabel names the kind of playerzone page a path is (e.g. "player-profile"),
+// reusing the fixture classification so the label stays low-cardinality.
+func pageLabel(path string) string {
+	file, err := FixtureFileForPath(path)
+	if err != nil {
+		return "other"
+	}
+	return strings.TrimSuffix(file, filepath.Ext(file))
 }
 
 // FixtureFetcher serves pre-captured HTML snapshots from disk instead of hitting the

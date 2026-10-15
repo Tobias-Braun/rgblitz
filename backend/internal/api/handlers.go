@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -21,6 +21,7 @@ import (
 	"github.com/tobiasmarkusbraun/rgblitz/internal/config"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/jobqueue"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/metrics"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
@@ -33,7 +34,7 @@ var berlin *time.Location
 func init() {
 	loc, err := time.LoadLocation("Europe/Berlin")
 	if err != nil {
-		log.Fatalf("cannot load Europe/Berlin timezone: %v", err)
+		panic("cannot load Europe/Berlin timezone: " + err.Error())
 	}
 	berlin = loc
 }
@@ -93,7 +94,7 @@ func (h *Handler) SearchPlayers(w http.ResponseWriter, r *http.Request) {
 
 	players, err := h.players.Search(q)
 	if err != nil {
-		log.Printf("search error: %v", err)
+		slog.Error("search players", "error", err)
 		jsonError(w, http.StatusInternalServerError, "search failed")
 		return
 	}
@@ -190,6 +191,7 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 
 	if h.cfg.DevMode {
 		if sp, ok := findDevSpecialPlayer(playerID); ok {
+			metrics.TodayRequests.WithLabelValues("dev").Inc()
 			jsonOK(w, h.devSpecialJobResponse(sp, h.Now().In(berlin)))
 			return
 		}
@@ -197,7 +199,7 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 
 	player, err := h.players.GetByID(playerID)
 	if err != nil {
-		log.Printf("db get player %q: %v", playerID, err)
+		slog.Error("db get player", "player_id", playerID, "error", err)
 		jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -221,6 +223,7 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 	// pipeline entirely, returning synthetic tournament data immediately.
 	if h.cfg.DevMode {
 		resp := h.buildDevResponse(player, now)
+		metrics.TodayRequests.WithLabelValues("dev").Inc()
 		jsonOK(w, JobResponse{Status: "done", Result: &resp})
 		return
 	}
@@ -230,10 +233,12 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 	// Weekday guard — tournaments only happen on weekends. Neither this nor the
 	// hour guard below ever touches the job queue.
 	if wd := now.Weekday(); wd != time.Saturday && wd != time.Sunday {
+		metrics.TodayRequests.WithLabelValues("weekday").Inc()
 		jsonOK(w, noTournament)
 		return
 	}
 	if now.Hour() < 8 {
+		metrics.TodayRequests.WithLabelValues("early").Inc()
 		jsonOK(w, noTournament)
 		return
 	}
@@ -241,7 +246,7 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 	dateStr := now.Format("2006-01-02")
 	job, err := h.jobs.LatestForPlayerDate(playerID, dateStr)
 	if err != nil {
-		log.Printf("load latest job for player %s: %v", playerID, err)
+		slog.Error("load latest job", "player_id", playerID, "error", err)
 		jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -250,10 +255,12 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 		switch job.Status {
 		case db.JobStatusQueued, db.JobStatusRunning:
 			// Already in flight — return its current status rather than enqueueing a duplicate.
+			metrics.TodayRequests.WithLabelValues("in_flight").Inc()
 			jsonOK(w, h.jobResponse(job))
 			return
 		case db.JobStatusDone:
 			if job.FinishedAt.Valid && now.Sub(job.FinishedAt.Time) < resultFreshWindow {
+				metrics.TodayRequests.WithLabelValues("cache_hit").Inc()
 				jsonOK(w, h.jobResponse(job))
 				return
 			}
@@ -264,22 +271,24 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !h.scrapePermitted() {
-		log.Printf("robots.txt permission check denies RGBlitzBot — skipping live scrape for player %s", playerID)
+		slog.Warn("robots.txt denies RGBlitzBot, skipping live scrape", "player_id", playerID)
+		metrics.TodayRequests.WithLabelValues("robots_denied").Inc()
 		jsonOK(w, noTournament)
 		return
 	}
 
 	newJob, err := h.jobs.Create(playerID, dateStr, now)
 	if err != nil {
-		log.Printf("create job for player %s: %v", playerID, err)
+		slog.Error("create job", "player_id", playerID, "error", err)
 		jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 	if err := h.stats.Create(newJob.ID, playerID, now); err != nil {
 		// Non-fatal — usage stats are best-effort and must never block serving the job.
-		log.Printf("record job stats for job %d: %v", newJob.ID, err)
+		slog.Warn("record job stats", "job_id", newJob.ID, "error", err)
 	}
 	h.queue.Enqueue(newJob.ID)
+	metrics.TodayRequests.WithLabelValues("new_job").Inc()
 	jsonOK(w, h.jobResponse(newJob))
 }
 
@@ -296,7 +305,7 @@ func (h *Handler) JobStatus(w http.ResponseWriter, r *http.Request) {
 
 	job, err := h.jobs.GetByID(jobID)
 	if err != nil {
-		log.Printf("load job %d: %v", jobID, err)
+		slog.Error("load job", "job_id", jobID, "error", err)
 		jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -323,7 +332,7 @@ type RgxJobStatsResponse struct {
 func (h *Handler) RgxJobStats(w http.ResponseWriter, r *http.Request) {
 	totals, err := h.stats.Totals()
 	if err != nil {
-		log.Printf("load job stats totals: %v", err)
+		slog.Error("load job stats totals", "error", err)
 		jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -339,7 +348,7 @@ func (h *Handler) jobResponse(job *db.Job) JobResponse {
 	case db.JobStatusQueued:
 		ahead, err := h.jobs.CountQueuedBefore(job.QueuedAt, job.ID)
 		if err != nil {
-			log.Printf("count queue position for job %d: %v", job.ID, err)
+			slog.Warn("count queue position", "job_id", job.ID, "error", err)
 			ahead = 0
 		}
 		position := ahead + 1
@@ -347,7 +356,7 @@ func (h *Handler) jobResponse(job *db.Job) JobResponse {
 	case db.JobStatusDone:
 		var result TodayResponse
 		if err := json.Unmarshal([]byte(job.ResultJSON), &result); err != nil {
-			log.Printf("decode result for job %d: %v", job.ID, err)
+			slog.Error("decode job result", "job_id", job.ID, "error", err)
 		} else {
 			resp.Result = &result
 		}
@@ -386,7 +395,7 @@ func (h *Handler) devSpecialJobResponse(sp devSpecialPlayer, now time.Time) JobR
 
 	job, err := h.jobs.LatestForPlayerDate(sp.id, dateStr)
 	if err != nil {
-		log.Printf("load latest dev job for %s: %v", sp.id, err)
+		slog.Error("load latest dev job", "player_id", sp.id, "error", err)
 	}
 	if job != nil {
 		switch job.Status {
@@ -404,7 +413,7 @@ func (h *Handler) devSpecialJobResponse(sp devSpecialPlayer, now time.Time) JobR
 
 	newJob, err := h.jobs.Create(sp.id, dateStr, now)
 	if err != nil {
-		log.Printf("create dev job for %s: %v", sp.id, err)
+		slog.Error("create dev job", "player_id", sp.id, "error", err)
 		return JobResponse{Status: "error", Error: "internal error"}
 	}
 
@@ -416,7 +425,7 @@ func (h *Handler) devSpecialJobResponse(sp devSpecialPlayer, now time.Time) JobR
 	h.resolveDevSpecialJob(sp, newJob.ID, now, 0)
 	resolved, err := h.jobs.GetByID(newJob.ID)
 	if err != nil || resolved == nil {
-		log.Printf("reload resolved dev job %d for %s: %v", newJob.ID, sp.id, err)
+		slog.Error("reload resolved dev job", "job_id", newJob.ID, "player_id", sp.id, "error", err)
 		return JobResponse{Status: "error", Error: "internal error"}
 	}
 	return h.jobResponse(resolved)
@@ -429,14 +438,14 @@ func (h *Handler) devSpecialJobResponse(sp devSpecialPlayer, now time.Time) JobR
 func (h *Handler) resolveDevSpecialJob(sp devSpecialPlayer, jobID int64, now time.Time, delay time.Duration) {
 	if delay > 0 {
 		if err := h.jobs.MarkRunning(jobID, time.Now()); err != nil {
-			log.Printf("mark dev job %d running: %v", jobID, err)
+			slog.Error("mark dev job running", "job_id", jobID, "error", err)
 		}
 		time.Sleep(delay)
 	}
 
 	if sp.id == "dev-error" {
 		if err := h.jobs.MarkError(jobID, "upstream unavailable", time.Now()); err != nil {
-			log.Printf("mark dev job %d error: %v", jobID, err)
+			slog.Error("mark dev job error", "job_id", jobID, "error", err)
 		}
 		return
 	}
@@ -444,14 +453,14 @@ func (h *Handler) resolveDevSpecialJob(sp devSpecialPlayer, jobID int64, now tim
 	resp := h.buildDevSpecialResult(sp, now)
 	resultJSON, err := json.Marshal(resp)
 	if err != nil {
-		log.Printf("encode dev job %d result: %v", jobID, err)
+		slog.Error("encode dev job result", "job_id", jobID, "error", err)
 		if err := h.jobs.MarkError(jobID, "encode result failed", time.Now()); err != nil {
-			log.Printf("mark dev job %d error: %v", jobID, err)
+			slog.Error("mark dev job error", "job_id", jobID, "error", err)
 		}
 		return
 	}
 	if err := h.jobs.MarkDone(jobID, string(resultJSON), time.Now()); err != nil {
-		log.Printf("mark dev job %d done: %v", jobID, err)
+		slog.Error("mark dev job done", "job_id", jobID, "error", err)
 	}
 }
 
@@ -763,16 +772,18 @@ func (h *Handler) SubmitFeedback(w http.ResponseWriter, r *http.Request) {
 
 	fb, err := h.feedback.Create(req.Rating, text, h.Now())
 	if err != nil {
-		log.Printf("create feedback: %v", err)
+		slog.Error("create feedback", "error", err)
 		jsonError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	metrics.FeedbackSubmitted.WithLabelValues(strconv.Itoa(fb.Rating)).Inc()
 
 	// Best-effort: the feedback is already saved, so a notification failure
 	// (missing config, Resend outage) must never surface to the user.
 	go func() {
 		if err := h.notifier.SendFeedbackNotification(fb); err != nil {
-			log.Printf("send feedback notification: %v", err)
+			slog.Warn("send feedback notification", "error", err)
 		}
 	}()
 

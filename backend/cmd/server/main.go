@@ -1,9 +1,12 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/tobiasmarkusbraun/rgblitz/internal/api"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
@@ -12,15 +15,18 @@ import (
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/email"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/jobqueue"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/metrics"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 func main() {
+	// Set as default so every slog call — and any leftover log.Print — is JSON on stdout.
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 	cfg := config.Load()
 
 	database, err := db.Open(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("open db: %v", err)
+		fatal("open db", err)
 	}
 	defer database.Close()
 
@@ -44,12 +50,12 @@ func main() {
 	// volume — the weekly cron alone wouldn't catch up until the next Saturday.
 	count, err := players.Count()
 	if err != nil {
-		log.Fatalf("count players: %v", err)
+		fatal("count players", err)
 	}
 	if count < 1000 {
-		log.Printf("player index has only %d rows — running initial scrape before serving requests", count)
+		slog.Info("player index too small, running initial scrape before serving requests", "players", count)
 		if err := scheduler.ScrapeNow(); err != nil {
-			log.Printf("initial scrape failed: %v", err)
+			slog.Error("initial scrape failed", "error", err)
 		}
 	}
 
@@ -63,7 +69,7 @@ func main() {
 	// single background worker that drains the queue in FIFO order.
 	stuck, err := jobs.ResetStuckRunning()
 	if err != nil {
-		log.Printf("reset stuck jobs: %v", err)
+		slog.Error("reset stuck jobs", "error", err)
 	}
 	for _, id := range stuck {
 		queue.Enqueue(id)
@@ -73,9 +79,20 @@ func main() {
 	handler := api.NewHandler(cfg, players, memCache, fetcher, permissions, jobs, jobStats, queue, feedback, notifier)
 	router := api.NewRouter(handler)
 
+	prometheus.MustRegister(&metrics.DBCollector{Players: players, Stats: jobStats, Tournaments: tournaments,
+		Feedback: feedback, Permissions: permissions, RespectPermission: cfg.RespectPermission})
+	go func() {
+		addr := ":" + cfg.MetricsPort
+		slog.Info("metrics server starting", "addr", addr)
+		fatal("metrics server", http.ListenAndServe(addr, metrics.Handler()))
+	}()
+
 	addr := ":" + cfg.Port
-	log.Printf("rgblitz server starting on %s (dev_mode=%v)", addr, cfg.DevMode)
-	if err := http.ListenAndServe(addr, router); err != nil {
-		log.Fatalf("server: %v", err)
-	}
+	slog.Info("rgblitz server starting", "addr", addr, "dev_mode", cfg.DevMode)
+	fatal("server", http.ListenAndServe(addr, router))
+}
+
+func fatal(msg string, err error) {
+	slog.Error(msg, "error", err)
+	os.Exit(1)
 }
