@@ -10,6 +10,7 @@ import (
 
 	"github.com/tobiasmarkusbraun/rgblitz/internal/cache"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/metrics"
 )
 
 // PlayerInfo, GameResult and TodayResult mirror the JSON shape returned by the
@@ -34,6 +35,8 @@ type TodayResult struct {
 	TotalPerformanceDelta   int          `json:"total_performance_delta,omitempty"`
 	HasProxy                bool         `json:"has_proxy,omitempty"`
 	Games                   []GameResult `json:"games,omitempty"`
+	// Division is only for the job worker's log line, not part of the API.
+	Division string `json:"-"`
 }
 
 // ScrapeDeps bundles the dependencies ScrapePlayerToday needs, shared between
@@ -152,6 +155,7 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		TotalPerformanceDelta: day.TotalPerformanceDelta,
 		HasProxy:              day.HasProxy,
 		Games:                 day.Games,
+		Division:              schedule.DivisionName,
 	}, tournamentID, nil
 }
 
@@ -231,15 +235,24 @@ func ComputeTeamDayResult(schedule TeamScheduleResult, divisionTeams []TeamEntry
 
 // --- playerzone fetchers (live or fixture-backed, via deps.Fetcher) ---
 
+// cached looks key up in deps.Cache and counts it as a hit or miss of the
+// named cache. A value of the wrong type should never be stored, but a bad
+// assertion must not panic — it's treated as a miss, so the caller re-fetches.
+func cached[T any](deps ScrapeDeps, name, key string) (T, bool) {
+	v, _ := deps.Cache.Get(key)
+	t, ok := v.(T)
+	result := "miss"
+	if ok {
+		result = "hit"
+	}
+	metrics.ScraperCache.WithLabelValues(name, result).Inc()
+	return t, ok
+}
+
 func fetchProfileEntries(deps ScrapeDeps, numericID string) ([]ProfileTournamentEntry, error) {
 	cacheKey := "profile:" + numericID
-	if cached, ok := deps.Cache.Get(cacheKey); ok {
-		if entries, ok := cached.([]ProfileTournamentEntry); ok {
-			return entries, nil
-		}
-		// Wrong type under this key should never happen (this cache is only ever
-		// populated a few lines below), but a bad assertion must not panic —
-		// treat it as a cache miss and re-fetch rather than crash the caller.
+	if entries, ok := cached[[]ProfileTournamentEntry](deps, "profile", cacheKey); ok {
+		return entries, nil
 	}
 
 	body, err := deps.Fetcher.Fetch("/players/" + numericID)
@@ -345,12 +358,8 @@ func matchDivision(divisions []Division, name string) string {
 // as long as a division team list is, since the two are fetched together.
 func fetchTournamentDivisions(deps ScrapeDeps, tournamentID int) ([]Division, error) {
 	cacheKey := fmt.Sprintf("tournament_divisions:%d", tournamentID)
-	if cached, ok := deps.Cache.Get(cacheKey); ok {
-		if divisions, ok := cached.([]Division); ok {
-			return divisions, nil
-		}
-		// See fetchProfileEntries: a mismatched type is treated as a cache miss rather
-		// than being allowed to panic.
+	if divisions, ok := cached[[]Division](deps, "divisions", cacheKey); ok {
+		return divisions, nil
 	}
 
 	body, err := deps.Fetcher.Fetch(fmt.Sprintf("/tournaments/%d", tournamentID))
@@ -407,12 +416,8 @@ func resolveTournamentGRT(deps ScrapeDeps, tournamentID int, now time.Time) (boo
 
 func fetchDivisionTeamsByPath(deps ScrapeDeps, teamsPath string) ([]TeamEntry, error) {
 	cacheKey := "division_teams:" + teamsPath
-	if cached, ok := deps.Cache.Get(cacheKey); ok {
-		if teams, ok := cached.([]TeamEntry); ok {
-			return teams, nil
-		}
-		// See the matching comment in fetchProfileEntries: treat a mismatched
-		// type as a cache miss rather than letting the assertion panic.
+	if teams, ok := cached[[]TeamEntry](deps, "division_teams", cacheKey); ok {
+		return teams, nil
 	}
 
 	body, err := deps.Fetcher.Fetch(teamsPath)

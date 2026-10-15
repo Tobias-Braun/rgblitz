@@ -54,3 +54,11 @@ func (s *TournamentStore) Create(t Tournament) error {
 	}
 	return nil
 }
+
+// CountByGRT counts the known tournaments, split by GRT status.
+func (s *TournamentStore) CountByGRT() (grt, other int, err error) {
+	err = s.db.QueryRow(`
+		SELECT COALESCE(SUM(is_grt), 0), COALESCE(SUM(1 - is_grt), 0) FROM tournaments
+	`).Scan(&grt, &other)
+	return grt, other, err
+}

@@ -8,11 +8,13 @@ package jobqueue
 import (
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"runtime/debug"
+	"strconv"
 	"time"
 
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/metrics"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
@@ -51,12 +53,22 @@ func (q *Queue) Start() {
 // queue isn't absurdly backed up (buffered channel of 256 job IDs).
 func (q *Queue) Enqueue(jobID int64) {
 	q.ch <- jobID
+	metrics.JobQueueDepth.Set(float64(len(q.ch)))
 }
 
 func (q *Queue) run() {
 	for jobID := range q.ch {
+		metrics.JobQueueDepth.Set(float64(len(q.ch)))
 		q.process(jobID)
 	}
+}
+
+// jobRun is what the job metrics and the "rgx job finished" log line need to
+// know about a job beyond its outcome.
+type jobRun struct {
+	id      int64
+	started time.Time
+	wait    time.Duration
 }
 
 // process runs one job end-to-end. A top-level recover guards the whole
@@ -69,35 +81,38 @@ func (q *Queue) run() {
 // the job as a normal, terminal "error" — it's never left in "running" state,
 // so it's never picked up by ResetStuckRunning and never retried.
 func (q *Queue) process(jobID int64) {
+	run := jobRun{id: jobID, started: q.now()}
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("jobqueue: recovered panic processing job %d: %v\n%s", jobID, r, debug.Stack())
-			q.fail(jobID, fmt.Sprintf("internal error (panic): %v", r))
+			slog.Error("jobqueue: recovered panic", "job_id", jobID, "panic", fmt.Sprint(r), "stack", string(debug.Stack()))
+			q.fail(run, "panic", fmt.Sprintf("internal error (panic): %v", r))
 		}
 	}()
 
 	job, err := q.jobs.GetByID(jobID)
 	if err != nil || job == nil {
-		log.Printf("jobqueue: load job %d: %v", jobID, err)
+		slog.Error("jobqueue: load job", "job_id", jobID, "error", err)
 		return
 	}
 
-	if err := q.jobs.MarkRunning(jobID, q.now()); err != nil {
-		log.Printf("jobqueue: mark job %d running: %v", jobID, err)
+	run.wait = run.started.Sub(job.QueuedAt)
+	metrics.JobQueueWait.Observe(run.wait.Seconds())
+	if err := q.jobs.MarkRunning(jobID, run.started); err != nil {
+		slog.Error("jobqueue: mark job running", "job_id", jobID, "error", err)
 	}
 
 	if !q.permissions.Permitted(q.respectPermission) {
-		q.fail(jobID, "playerzone scraping is currently disallowed by robots.txt")
+		q.fail(run, "robots_denied", "playerzone scraping is currently disallowed by robots.txt")
 		return
 	}
 
 	player, err := q.players.GetByID(job.PlayerID)
 	if err != nil {
-		q.fail(jobID, fmt.Sprintf("load player: %v", err))
+		q.fail(run, "db", fmt.Sprintf("load player: %v", err))
 		return
 	}
 	if player == nil {
-		q.fail(jobID, "player not found")
+		q.fail(run, "player_not_found", "player not found")
 		return
 	}
 
@@ -107,36 +122,75 @@ func (q *Queue) process(jobID int64) {
 	// compute "today" the way the requester saw it.
 	result, tournamentID, err := scraper.ScrapePlayerToday(q.deps, player, job.QueuedAt)
 	if err != nil {
-		q.fail(jobID, err.Error())
+		q.fail(run, "scrape", err.Error())
 		return
 	}
 
+	q.done(run, result, tournamentID)
+}
+
+func (q *Queue) done(run jobRun, result scraper.TodayResult, tournamentID int) {
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
-		q.fail(jobID, fmt.Sprintf("encode result: %v", err))
+		q.fail(run, "encode", fmt.Sprintf("encode result: %v", err))
 		return
 	}
 
+	jobID := run.id
 	now := q.now()
 	if err := q.jobs.MarkDone(jobID, string(resultJSON), now); err != nil {
-		log.Printf("jobqueue: mark job %d done: %v", jobID, err)
+		slog.Error("jobqueue: mark job done", "job_id", jobID, "error", err)
 	}
 	if q.stats != nil {
 		if err := q.stats.MarkDone(jobID, tournamentID, now); err != nil {
-			log.Printf("jobqueue: mark job stats %d done: %v", jobID, err)
+			slog.Error("jobqueue: mark job stats done", "job_id", jobID, "error", err)
 		}
 	}
+
+	for _, g := range result.Games {
+		metrics.Games.WithLabelValues(g.Result).Inc()
+		metrics.RGXGap.Observe(float64(g.OpponentRGX - g.TeamRGX))
+	}
+	if result.Status == "ok" {
+		metrics.RGXTotalDelta.Observe(float64(result.TotalDelta))
+	}
+	q.finished(run, result.Status, now, "tournament", q.tournamentLabel(tournamentID),
+		"division", result.Division, "games", len(result.Games), "total_delta", result.TotalDelta)
 }
 
-func (q *Queue) fail(jobID int64, msg string) {
-	log.Printf("jobqueue: job %d failed: %s", jobID, msg)
+func (q *Queue) fail(run jobRun, outcome, msg string) {
 	now := q.now()
-	if err := q.jobs.MarkError(jobID, msg, now); err != nil {
-		log.Printf("jobqueue: mark job %d error: %v", jobID, err)
+	if err := q.jobs.MarkError(run.id, msg, now); err != nil {
+		slog.Error("jobqueue: mark job error", "job_id", run.id, "error", err)
 	}
 	if q.stats != nil {
-		if err := q.stats.MarkError(jobID, now); err != nil {
-			log.Printf("jobqueue: mark job stats %d error: %v", jobID, err)
+		if err := q.stats.MarkError(run.id, now); err != nil {
+			slog.Error("jobqueue: mark job stats error", "job_id", run.id, "error", err)
 		}
 	}
+	q.finished(run, outcome, now, "error", msg)
+}
+
+// finished records a job's terminal outcome: its metrics plus exactly one
+// "rgx job finished" log line. Player names are never logged.
+func (q *Queue) finished(run jobRun, outcome string, at time.Time, attrs ...any) {
+	duration := at.Sub(run.started)
+	metrics.JobsFinished.WithLabelValues(outcome).Inc()
+	metrics.JobDuration.Observe(duration.Seconds())
+	slog.Info("rgx job finished", append([]any{"job_id", run.id, "outcome", outcome,
+		"wait_seconds", run.wait.Seconds(), "duration_seconds", duration.Seconds()}, attrs...)...)
+}
+
+// tournamentLabel names a tournament for logs: its stored name if known, else
+// its ID, or "" for none.
+func (q *Queue) tournamentLabel(id int) string {
+	if id == 0 {
+		return ""
+	}
+	if q.deps.Tournaments != nil {
+		if t, err := q.deps.Tournaments.Get(id); err == nil && t != nil && t.Name != "" {
+			return t.Name
+		}
+	}
+	return strconv.Itoa(id)
 }
