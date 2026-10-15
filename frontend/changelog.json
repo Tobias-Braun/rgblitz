@@ -1,0 +1,97 @@
+[
+  {
+    "version": "0.8.1",
+    "date": "2026-10-15",
+    "internal": true,
+    "changes": [
+      "Testdaten im Entwicklungsmodus korrigiert."
+    ]
+  },
+  {
+    "version": "0.8.0",
+    "date": "2026-10-15",
+    "internal": false,
+    "changes": [
+      "Unter der Suchleiste siehst du jetzt die anstehenden Turniere."
+    ]
+  },
+  {
+    "version": "0.7.2",
+    "date": "2026-09-21",
+    "internal": true,
+    "changes": [
+      "Automatische Auslieferung neuer Versionen eingerichtet."
+    ]
+  },
+  {
+    "version": "0.7.1",
+    "date": "2026-09-17",
+    "internal": false,
+    "changes": [
+      "Anonyme, cookiefreie Besucherstatistik eingeführt – die Datenschutzerklärung ist entsprechend aktualisiert."
+    ]
+  },
+  {
+    "version": "0.7.0",
+    "date": "2026-09-14",
+    "internal": false,
+    "changes": [
+      "Über den neuen Feedback-Button kannst du uns direkt aus der App schreiben."
+    ]
+  },
+  {
+    "version": "0.6.0",
+    "date": "2026-09-13",
+    "internal": false,
+    "changes": [
+      "Neue Ergebnis-Interpretation: Sie zeigt, ob deine RGX-Veränderung deine tatsächliche Leistung über- oder unterbewertet.",
+      "RGBlitz funktioniert mit dem neuen Aufbau der PlayerZone.",
+      "Ergebnisansicht optisch überarbeitet."
+    ]
+  },
+  {
+    "version": "0.5.0",
+    "date": "2026-08-23",
+    "internal": false,
+    "changes": [
+      "In der Spielliste stehen jetzt die Teamnamen und RGX-Werte deiner Gegner."
+    ]
+  },
+  {
+    "version": "0.4.0",
+    "date": "2026-08-16",
+    "internal": false,
+    "changes": [
+      "Oberfläche überarbeitet.",
+      "Dein aktuelles Turnier wird zuverlässiger gefunden.",
+      "Fehler behoben, durch den RGBlitz zeitweise nicht erreichbar war."
+    ]
+  },
+  {
+    "version": "0.3.0",
+    "date": "2026-08-07",
+    "internal": false,
+    "changes": [
+      "Datenschutzerklärung und Impressum hinzugefügt."
+    ]
+  },
+  {
+    "version": "0.2.0",
+    "date": "2026-08-03",
+    "internal": false,
+    "changes": [
+      "Anzeige, wie viele RGX-Berechnungen RGBlitz schon durchgeführt hat.",
+      "Nur Turniere der German Roundnet Tour verändern deinen RGX – andere Turniere werden jetzt korrekt ignoriert."
+    ]
+  },
+  {
+    "version": "0.1.0",
+    "date": "2026-08-02",
+    "internal": false,
+    "changes": [
+      "Erste Version: Suche dich und sieh live, wie sich dein RGX am Turniertag verändert.",
+      "Spiele mit Freilos werden korrekt berücksichtigt.",
+      "FAQ-Seite mit Antworten auf die wichtigsten Fragen."
+    ]
+  }
+]

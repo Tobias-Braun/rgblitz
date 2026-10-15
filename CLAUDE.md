@@ -170,6 +170,8 @@ composables/
   useBattery.ts       # wraps navigator.getBattery() + prefers-reduced-motion, exposes isFastMode
   useTodayResult.ts   # drives job-create → poll-every-2s-until-final-status flow
   useRgxJobStats.ts   # non-blocking (lazy) fetch of /api/stats/rgx-jobs for the footer's served-count stat
+utils/
+  changelog.ts        # app version + visible releases from changelog.json
   useUpcomingTournaments.ts # non-blocking (lazy) fetch of /api/tournaments/upcoming, rendered by UpcomingTournaments.vue
 config/
   mood-phrases.ts     # RGX-delta bracket → German phrase map
@@ -177,6 +179,15 @@ config/
 types/
   api.ts              # shared API response types
 ```
+
+## Versioning & changelog
+
+Every merge to `main` is a release. The `release` job in `.github/workflows/docker-publish.yml` pipes the commits and diff since the last `v*` tag into `claude -p` (prompt and output schema in `scripts/release/`), and `scripts/release/release.mjs` prepends the result to `frontend/changelog.json`. The job then commits `chore: release vX.Y.Z`, tags it, and the images are built from that release commit.
+
+- `frontend/changelog.json` is the single source of truth. Its first entry is the app version shown in the footer (`utils/changelog.ts`), and `/changelog` lists every entry not marked `internal`.
+- The version follows user-visible impact, not API compatibility. Claude picks `minor` (new or noticeably changed feature) or `patch`, and marks releases with no user-visible change `internal`. A major bump happens only when `release:major` appears in a commit message or PR title.
+- CI authenticates with the owner's Claude subscription via the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (`claude setup-token`). Without it, the release job fails and nothing is deployed.
+- Don't edit `changelog.json` by hand in a feature PR. To fix wording, change an existing entry in a separate PR.
 
 ## Environment variables (Go backend)
 
