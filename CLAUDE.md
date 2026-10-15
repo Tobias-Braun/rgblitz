@@ -139,7 +139,8 @@ cmd/reindex/        # manual re-run of the player index scrape
 cmd/scrapecheck/    # manual fixture/live scrape smoke test
 cmd/checkpermission/ # manual robots.txt permission check
 cmd/rgxcalc/        # CLI: compute one game's RGX delta from raw inputs, no network/DB
-cmd/fixturecapture/ # CLI: snapshot a whole tournament running today (or one player's scrape)
+cmd/fixturecapture/ # CLI: snapshot a whole tournament running today (or one player's scrape,
+                    # or a league team's matchday with --league)
                     # into a replayable capture dir — HTML + parsed intermediates + deltas +
                     # cross-checks; driven by scripts/capture-fixtures.sh
 internal/api/       # HTTP handlers + router

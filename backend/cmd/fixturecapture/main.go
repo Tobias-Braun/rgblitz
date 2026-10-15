@@ -4,7 +4,7 @@
 // parsed intermediates and the computed deltas, so what's on screen at the tournament can be
 // compared against what the parsers actually saw.
 //
-// It has two modes.
+// It has three modes.
 //
 // # Tournament mode (no arguments)
 //
@@ -22,9 +22,24 @@
 // Captures just what one player's /api/players/{id}/today request would fetch, via the real
 // ScrapePlayerToday pipeline.
 //
-// Either way each snapshot directory holds:
+// # League mode
 //
-//	*.html         every fetched page
+//	go run ./cmd/fixturecapture --league "39500,39823"
+//
+// Captures one Deutsche Roundnet Liga team's matchday per team ID (the {id} of the team's
+// /tournaments/schedule/team/{id} page): its schedule page, the matchday group page of each
+// Begegnung, and for today's Begegnungen the /ajax/get-subgames Partien and the opponents'
+// schedule pages. Every roster player runs through the real ScrapePlayerLeagueToday, and the
+// report lists each player's per-Partie deltas next to the RGX their roster card shows — the
+// pre-matchday baseline during a matchday, the recalculated value once playerzone has run it.
+//
+// A league snapshot replays offline through the same mode:
+//
+//	go run ./cmd/fixturecapture --league <id> --from-fixtures <snapshot> --date <YYYY-MM-DD>
+//
+// Every snapshot directory holds:
+//
+//	*.html         every fetched page (*.json for league Partien)
 //	manifest.json  URL path → file, so the snapshot replays offline with full fidelity:
 //	                 go run ./cmd/scrapecheck --player X --fixture-dir <snapshot> --date <YYYY-MM-DD>
 //	capture.json   machine-readable: fetched paths, parsed intermediates, computed results
@@ -57,6 +72,7 @@ func main() {
 	dateStr := flag.String("date", "", "override today's date as YYYY-MM-DD (Europe/Berlin); mainly useful together with --from-fixtures, whose snapshot is from a fixed day")
 	divisionFilter := flag.String("divisions", "", "tournament mode: only capture divisions whose name contains one of these comma-separated substrings (e.g. \"Open,Women\")")
 	includeNonGRT := flag.Bool("include-non-grt", false, "tournament mode: also capture tournaments that aren't part of the German Roundnet Tour (the backend reports those as no_tournament)")
+	leagueArg := flag.String("league", "", "comma-separated league team IDs (the {id} of /tournaments/schedule/team/{id}) to capture today's league matchday for")
 	maxRequests := flag.Int("max-requests", 600, "tournament mode: stop capturing after this many playerzone requests, so one huge tournament can't run for hours at 1 req/2s")
 	flag.Parse()
 
@@ -120,7 +136,9 @@ func main() {
 	}
 
 	var failures int
-	if queries := splitList(*playersArg); len(queries) > 0 {
+	if teams := splitList(*leagueArg); len(teams) > 0 {
+		failures = captureLeague(run, teams)
+	} else if queries := splitList(*playersArg); len(queries) > 0 {
 		failures = capturePlayers(run, queries)
 	} else {
 		failures = captureTournaments(run, tournamentOptions{
