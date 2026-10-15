@@ -6,6 +6,17 @@ if (umamiScriptUrl && umamiWebsiteId) {
     script: [{ src: umamiScriptUrl, 'data-website-id': umamiWebsiteId, defer: true }],
   })
 }
+
+const { identify } = useTrack()
+const { prefersReducedMotion, isFastMode } = useBattery()
+
+onMounted(() => {
+  identify({
+    fast_mode: isFastMode.value,
+    reduced_motion: prefersReducedMotion.value,
+    standalone: window.matchMedia('(display-mode: standalone)').matches,
+  })
+})
 </script>
 
 <template>

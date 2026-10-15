@@ -38,7 +38,10 @@
           Umami setzt keine Cookies und verwendet keine dauerhaften
           Identifikatoren. Erfasst werden lediglich aggregierte,
           anonymisierte Zugriffsdaten wie aufgerufene Seite, Referrer,
-          Browser, Betriebssystem, Gerätetyp, Bildschirmauflösung und Land.
+          Browser, Betriebssystem, Gerätetyp, Bildschirmauflösung sowie Land,
+          Region und Stadt. Für die Ortsangabe wird deine IP-Adresse kurzzeitig
+          mit einer lokal auf dem Server liegenden Geodatenbank abgeglichen;
+          gespeichert wird nur der ermittelte Ort, nicht die IP-Adresse.
           Deine IP-Adresse wird dabei nicht gespeichert: Sie fließt lediglich
           kurzzeitig zusammen mit einem täglich wechselnden Zufallswert in
           eine Einweg-Hashfunktion ein, um Mehrfachbesuche innerhalb eines
@@ -46,6 +49,17 @@
           Nachverfolgung über mehrere Tage oder Seiten hinweg möglich ist. Es
           werden keine Nutzungsprofile erstellt und kein Verhalten
           geräte- oder seitenübergreifend nachverfolgt.
+        </p>
+        <p class="answer">
+          Zusätzlich werden anonyme Interaktionen gezählt, z. B. die Auswahl
+          eines Suchergebnisses (nur dessen Position und die Länge der
+          Eingabe), die Art des angezeigten Ergebnisses mit grob gerundeter
+          RGX-Änderung und Wartezeit, das Aufklappen von Details sowie das
+          Absenden einer Feedback-Bewertung. Außerdem wird erfasst, ob der
+          Energiesparmodus der Seite aktiv ist, ob dein Gerät reduzierte
+          Bewegung bevorzugt und ob RGBlitz als installierte App geöffnet
+          wurde. Namen von Spieler:innen, Spieler-IDs und Suchbegriffe werden
+          dabei nie übermittelt.
         </p>
         <p class="answer">
           Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (berechtigtes
