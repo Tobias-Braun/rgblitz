@@ -540,7 +540,6 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 			Round:        rounds[i%len(rounds)],
 			OpponentName: team[0].Name + " / " + team[1].Name,
 			WeAreTeamOne: true,
-			SetScores:    fakeSetScores(setsWon, setsLost, rng),
 			Outcome:      outcomeWord(setsWon, setsLost),
 		}
 
@@ -549,6 +548,7 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 		totalDelta += breakdown.Delta
 		totalPerformanceDelta += breakdown.PerformanceDelta
 		games = append(games, GameResult{
+			Sets:                      fakeSetScores(setsWon, setsLost, rng),
 			Round:                     card.Round,
 			OpponentName:              card.OpponentName,
 			OurTeamName:               ourTeamName,
@@ -578,13 +578,13 @@ func randomOutcome(rng *rand.Rand) (won, lost int) {
 	return c[0], c[1]
 }
 
-func fakeSetScores(won, lost int, rng *rand.Rand) []scraper.SetScore {
-	var sets []scraper.SetScore
+func fakeSetScores(won, lost int, rng *rand.Rand) []scraper.SetResult {
+	sets := make([]scraper.SetResult, 0, won+lost)
 	for i := 0; i < won; i++ {
-		sets = append(sets, scraper.SetScore{TeamOneScore: 21, TeamTwoScore: 15 + rng.Intn(5)})
+		sets = append(sets, scraper.SetResult{OurScore: 21, OpponentScore: 15 + rng.Intn(5)})
 	}
 	for i := 0; i < lost; i++ {
-		sets = append(sets, scraper.SetScore{TeamOneScore: 15 + rng.Intn(5), TeamTwoScore: 21})
+		sets = append(sets, scraper.SetResult{OurScore: 15 + rng.Intn(5), OpponentScore: 21})
 	}
 	return sets
 }
