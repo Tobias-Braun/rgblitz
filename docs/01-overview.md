@@ -50,6 +50,6 @@ Roundnet Germany runs its own player portal at **playerzone.roundnetgermany.de**
 
 ## Domain Assumptions
 
-- **Tournaments only occur on weekends (Saturday and Sunday).** There are no weekday tournaments — this is a hard domain rule with no known exceptions. Any request arriving on a weekday can immediately return `{status: "no_tournament"}` without contacting playerzone.
+- **Tournaments only occur on weekends (Saturday and Sunday).** There are no weekday tournaments — this is a hard domain rule with no known exceptions. Matchdays of the Deutsche Roundnet Liga (see `03-data-requirements.md §League Matchdays`) are on Saturdays and Sundays as well. Any request arriving on a weekday can immediately return `{status: "no_tournament"}` without contacting playerzone.
 - The player-index scrape runs **Saturday and Sunday 03:00 CET** (see `internal/cron/jobs.go`) — early enough that it's done well before either day's matches start. Running on both days (not just Saturday) means a Saturday tournament's RGX changes are picked up before a Sunday tournament computes its own deltas, rather than using stale Friday-night values for both days.
 - The backend also runs this same index scrape once at startup if the `players` table has fewer than 1000 rows, so a fresh deployment isn't stuck with an empty autocomplete for up to a week (see `cmd/server/main.go`).

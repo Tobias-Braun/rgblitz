@@ -243,7 +243,7 @@ Flags:
 
 Every live request identifies itself as `User-Agent: RGBlitzBot` (see `scraper.DefaultUserAgent`) — a deliberately distinct, non-browser-impersonating name that playerzone can trivially block via robots.txt if they want to.
 
-When `RESPECT_PERMISSION=true`, the app checks whether robots.txt allows `RGBlitzBot` to fetch every page shape it needs (`scraper.RequiredScrapePaths`: home, both ranking tabs, `/tournaments/`) before doing anything else:
+When `RESPECT_PERMISSION=true`, the app checks whether robots.txt allows `RGBlitzBot` to fetch every page shape it needs (`scraper.RequiredScrapePaths`: home, both ranking tabs, `/tournaments/`, `/ajax/`) before doing anything else:
 
 - The weekly (or manually triggered via `cmd/reindex`) player index scrape re-checks robots.txt first. If disallowed, it makes **zero** further requests and just stores the result.
 - The result is persisted in the `scrape_permission` SQLite table (`internal/db/permission.go`) and reused by live `/api/players/:id/today` requests — if the stored result says "disallowed" (or no check has ever run), the API returns `{"status": "no_tournament"}` without touching the network, same as the weekday/time guard.

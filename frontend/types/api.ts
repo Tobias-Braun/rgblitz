@@ -44,6 +44,8 @@ export interface Game {
 
 export interface TodayResultOk {
   status: "ok";
+  // Set when the games are Partien of a league matchday, omitted for a tournament.
+  competition?: "league";
   stale?: boolean;
   player: PlayerRef;
   date: string;

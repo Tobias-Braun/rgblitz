@@ -191,7 +191,7 @@ async function focusInput() {
         </svg>
         <span class="placeholder">Spieler:in suchen…</span>
       </button>
-      <p class="hint">nur an Turniertagen · Sa &amp; So</p>
+      <p class="hint">nur an Turnier- und Spieltagen · Sa &amp; So</p>
     </div>
 
     <div v-if="isFocused" class="results">

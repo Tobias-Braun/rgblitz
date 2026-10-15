@@ -27,6 +27,7 @@ type PlayerInfo struct {
 
 type TodayResult struct {
 	Status                  string       `json:"status"`
+	Competition             string       `json:"competition,omitempty"` // CompetitionLeague, or "" for a tournament
 	Stale                   bool         `json:"stale,omitempty"`
 	Player                  *PlayerInfo  `json:"player,omitempty"`
 	Date                    string       `json:"date,omitempty"`
@@ -44,6 +45,7 @@ type ScrapeDeps struct {
 	Cache       *cache.Cache
 	ProxyURL    func(string) string
 	Tournaments *db.TournamentStore
+	League      *db.LeagueStore
 }
 
 // ScrapePlayerToday runs the full scrape pipeline (player profile → today's

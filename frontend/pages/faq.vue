@@ -33,6 +33,18 @@
       </section>
 
       <section class="entry">
+        <h2 class="question">Funktioniert RGBlitz auch für die Liga?</h2>
+        <p class="answer">
+          Ja, für die reguläre Saison der Deutschen Roundnet Liga. An einem
+          Spieltag zeigt RGBlitz jede Partie, die du gespielt hast, als eigenes
+          Spiel – mit deinem Partner bzw. deiner Partnerin und dem gegnerischen
+          Paar. Die RGX-Veränderung wird wie bei Turnieren aus den RGX-Werten
+          beider Paare vor dem Spieltag berechnet. Die Finalturniere im Frühjahr
+          werden noch nicht unterstützt.
+        </p>
+      </section>
+
+      <section class="entry">
         <h2 class="question">Warum gibt es eine Warteschlange?</h2>
         <p class="answer">
           Wir wollen die Playerzone nicht überlasten. Deshalb ruft RGBlitz im

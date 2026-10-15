@@ -139,6 +139,7 @@ const fallbackPlayerRef = computed<PlayerRef | null>(() => {
         <NoGamesPlayedYet
           v-else-if="data?.status === 'ok' && !data.games?.length"
           :player="data.player"
+          :league="data.competition === 'league'"
           :refreshing="pending"
           :last-fetched-at="lastFetchedAt"
           :job-finished-at="jobFinishedAt"

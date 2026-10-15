@@ -86,6 +86,15 @@ func TestParsers_MalformedHTMLDoesNotPanic(t *testing.T) {
 	mustNotPanic("ParseTeamSchedule", func() {
 		_, _ = scraper.ParseTeamSchedule(strings.NewReader(malformed), 1)
 	})
+	mustNotPanic("ParseLeagueFixtures", func() {
+		_, _ = scraper.ParseLeagueFixtures(strings.NewReader(malformed), 1)
+	})
+	mustNotPanic("ParseMatchdayGroup", func() {
+		_, _ = scraper.ParseMatchdayGroup(strings.NewReader(malformed), 1)
+	})
+	mustNotPanic("ParseSubgames", func() {
+		_, _ = scraper.ParseSubgames(strings.NewReader(`{"html": "` + strings.ReplaceAll(malformed, `"`, `\"`) + `"}`))
+	})
 }
 
 // Non-GRT tournaments (e.g. EURA-rated ones) don't render an RGX badge on player

@@ -118,6 +118,12 @@
             abgerufen; nach Turnierende für bis zu 24 Stunden.
           </li>
           <li>
+            Welche Spieler:innen in welchem Team der laufenden Saison der
+            Deutschen Roundnet Liga spielen, wird einmal pro Woche aus den
+            öffentlichen Kaderlisten neu aufgebaut; Einträge vergangener
+            Saisons werden dabei gelöscht.
+          </li>
+          <li>
             Ob ein Turnier zur German Roundnet Tour gehört, wird einmalig
             dauerhaft vermerkt, da sich das nach Turnierstart nicht mehr
             ändert.

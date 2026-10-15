@@ -105,7 +105,10 @@ func (q *Queue) process(jobID int64) {
 	// whenever the worker happens to get around to it — a job processed a few
 	// seconds late (or, in a test, with a frozen/overridden clock) must still
 	// compute "today" the way the requester saw it.
-	result, tournamentID, err := scraper.ScrapePlayerToday(q.deps, player, job.QueuedAt)
+	result, tournamentID, handled, err := scraper.ScrapePlayerLeagueToday(q.deps, player, job.QueuedAt)
+	if err == nil && !handled {
+		result, tournamentID, err = scraper.ScrapePlayerToday(q.deps, player, job.QueuedAt)
+	}
 	if err != nil {
 		q.fail(jobID, err.Error())
 		return

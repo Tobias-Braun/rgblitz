@@ -52,11 +52,12 @@ defineEmits<{
         </svg>
       </div>
       <p class="message">
-        Es sieht so aus, als würdest du heute kein GRT Turnier spielen. Diese
-        Seite funktioniert nur an Turnier-Tagen. Turniere werden erst
-        registriert, wenn die Divisionen veröffentlicht worden sind.
+        Es sieht so aus, als würdest du heute weder ein GRT Turnier noch einen
+        Spieltag der Deutschen Roundnet Liga spielen. Diese Seite funktioniert
+        nur an Turnier- und Spieltagen. Turniere werden erst registriert, wenn
+        die Divisionen veröffentlicht worden sind.
       </p>
-      <p class="hint">Turniere sind nur Sa &amp; So.</p>
+      <p class="hint">Turniere und Spieltage sind nur Sa &amp; So.</p>
     </div>
     <button type="button" class="search-again" @click="$emit('search-again')">
       Andere:n Spieler:in suchen
