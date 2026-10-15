@@ -267,6 +267,23 @@ func TestTodayResult_DevSpecialOk_CreatesImmediatelyDoneJob(t *testing.T) {
 	}
 }
 
+func TestTodayResult_DevSpecialLeague_IsMarkedLeague(t *testing.T) {
+	cfg := &config.Config{DevMode: true}
+	h, _, _, _, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)
+	router := api.NewRouter(h)
+
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/players/dev-league/today", nil))
+
+	var resp api.JobResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Result == nil || resp.Result.Competition != "league" || len(resp.Result.Games) == 0 {
+		t.Errorf("result = %+v, want a league result with games", resp.Result)
+	}
+}
+
 func TestTodayResult_DevSpecialLoading_ResolvesInBackground(t *testing.T) {
 	cfg := &config.Config{DevMode: true}
 	h, _, _, jobs, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)

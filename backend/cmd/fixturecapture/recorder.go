@@ -179,6 +179,12 @@ func uniquePageName(path string) string {
 	case path == "/robots.txt":
 		return "robots.txt"
 	}
+	if m := reMatchdayGroupParam.FindStringSubmatch(path); m != nil {
+		return fmt.Sprintf("matchday-group-%s.html", m[1])
+	}
+	if m := reSubgamesPath.FindStringSubmatch(path); m != nil {
+		return fmt.Sprintf("subgames-%s.json", m[1])
+	}
 	if m := reTeamSchedulePath.FindStringSubmatch(path); m != nil {
 		return fmt.Sprintf("team-%s-schedule.html", m[1])
 	}

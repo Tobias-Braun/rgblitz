@@ -42,7 +42,7 @@ export const MOOD_THRESHOLDS: MoodThreshold[] = [
     min: -39.9,
     max: 15,
     phrase:
-      "Heute war wohl nichts, aber im nächsten Turnier holste das wieder rein.",
+      "Heute war wohl nichts, aber beim nächsten Mal holste das wieder rein.",
   },
   {
     min: -Infinity,

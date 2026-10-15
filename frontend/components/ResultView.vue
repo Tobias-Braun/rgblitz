@@ -135,7 +135,7 @@ const jobFinishedAtLabel = computed(() => {
       sein oder es kann zu Störungen kommen.
     </p>
 
-    <SpieleListe :games="games" />
+    <SpieleListe :games="games" :show-round="result.competition === 'league'" />
 
     <div class="verdict-accordion">
       <button

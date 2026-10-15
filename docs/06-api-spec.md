@@ -316,6 +316,7 @@ The result is cached in memory for 1 hour; concurrent cache misses share a singl
 | `queue_position` | integer | 1-based position among currently queued jobs; only present when `status: "queued"` |
 | `result` | object | The scrape result (`TodayResult` shape); present when `status` is `"done"` or `"no_tournament"` |
 | `result.status` | `"ok" \| "no_tournament"` | Result state inside `result` |
+| `result.competition` | `"league"` | Present only when the games are Partien of a league matchday (one game per Partie the player played; `round` is `"{Partie} · {matchday}"`, `our_team_name`/`opponent_name` are the two pairs, the opponent's club in parentheses). Omitted for a tournament |
 | `error` | string | Failure message; present when `status: "error"` |
 | `finished_at` | string (ISO 8601) | When the job reached `done`/`error` |
 | `has_proxy` | boolean | Any RGX value in the calculation was estimated from division default (new player) |
