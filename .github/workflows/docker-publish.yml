@@ -3,12 +3,81 @@ name: Publish Docker images
 on:
   push:
     branches: [main]
-    tags: ["v*.*.*"]
   pull_request:
     branches: [main]
 
 jobs:
+  # Every merge to main is a release: Claude picks the bump and writes the
+  # changelog entry, the release commit is tagged, and that commit is built.
+  release:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    # Serialized so two quick merges can't claim the same version.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Collect changes since last release
+        id: changes
+        run: |
+          last=$(git describe --tags --abbrev=0 --match 'v*')
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          # An earlier queued run may already have released these commits.
+          if [ -z "$(git rev-list "$last..HEAD")" ]; then exit 0; fi
+          echo "pending=true" >> "$GITHUB_OUTPUT"
+          git diff "$last..HEAD" -- . ':!**/package-lock.json' ':!**/pnpm-lock.yaml' ':!**/go.sum' > "$RUNNER_TEMP/diff.txt"
+          {
+            echo "# Commits"
+            git log --format='%h %s%n%b' "$last..HEAD"
+            echo "# Changed files"
+            git diff --stat "$last..HEAD"
+            echo "# Diff (truncated)"
+            head -c 200000 "$RUNNER_TEMP/diff.txt"
+          } > "$RUNNER_TEMP/changes.txt"
+
+      - name: Write changelog entry with Claude
+        if: steps.changes.outputs.pending == 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude -p "$(cat scripts/release/prompt.md)" \
+            --output-format json \
+            --json-schema "$(cat scripts/release/schema.json)" \
+            --tools "" \
+            --model sonnet \
+            < "$RUNNER_TEMP/changes.txt" > "$RUNNER_TEMP/claude.json"
+
+      - name: Commit and tag release
+        id: release
+        if: steps.changes.outputs.pending == 'true'
+        run: |
+          major=$(git log --format=%B "${{ steps.changes.outputs.last }}..HEAD" | grep -q 'release:major' && echo --major || true)
+          version=$(node scripts/release/release.mjs "$RUNNER_TEMP/claude.json" $major)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore: release v$version"
+          git tag -a "v$version" -m "v$version"
+          # Pushed with GITHUB_TOKEN, which never triggers another workflow run.
+          git push origin HEAD:main "v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: release
+    # PRs skip the release and build their head; on main only a new release is built.
+    if: always() && (needs.release.result == 'skipped' || needs.release.outputs.version != '')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,6 +88,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.sha || github.sha }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -27,10 +98,12 @@ jobs:
         id: owner
         run: echo "name=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
-      - name: Compute Flux image tag
+      - name: Compute image tags
         id: fluxtag
         # The commit timestamp (not the build time) keeps the tag identical across matrix jobs and reruns, and sortable by commit order.
-        run: echo "tag=$(git show -s --format=%ct HEAD)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "tag=$(git show -s --format=%ct HEAD)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
@@ -48,10 +121,10 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=sha,prefix=,format=short
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.fluxtag.outputs.sha }}
+            type=semver,pattern={{version}},value=v${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
+            type=semver,pattern={{major}},value=v${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=${{ steps.fluxtag.outputs.tag }},enable=${{ github.ref == 'refs/heads/main' }}
 
