@@ -337,6 +337,25 @@ func TestParseTournamentID(t *testing.T) {
 	}
 }
 
+// Every live page opens with the site navigation, whose "League" item links the current league
+// season — it must not be mistaken for the tournament the page belongs to.
+func TestParseTournamentID_IgnoresSiteNavigation(t *testing.T) {
+	html := `<html><body>
+	<rg-navigation>
+		<rg-navigation-item href="/tournaments/793-2027-04-11-deutsche-roundnet-liga-2026-2027">League</rg-navigation-item>
+	</rg-navigation>
+	<a class="rg-tournament-nav--identity" href="/tournaments/695-2026-09-12-hamburger-hafen-spritz-tour">Hamburg</a>
+	</body></html>`
+
+	id, err := scraper.ParseTournamentID(strings.NewReader(html))
+	if err != nil {
+		t.Fatalf("ParseTournamentID: %v", err)
+	}
+	if id != 695 {
+		t.Errorf("got %d, want 695", id)
+	}
+}
+
 // Before a tournament starts, its schedule pages carry a summary line instead of the
 // navigation, and no division link at all.
 func TestParseTeamSchedule_UpcomingTournamentLayout(t *testing.T) {

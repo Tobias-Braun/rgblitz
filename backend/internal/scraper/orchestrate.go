@@ -27,14 +27,15 @@ type PlayerInfo struct {
 }
 
 type TodayResult struct {
-	Status                  string       `json:"status"`
-	Stale                   bool         `json:"stale,omitempty"`
-	Player                  *PlayerInfo  `json:"player,omitempty"`
-	Date                    string       `json:"date,omitempty"`
-	TotalDelta              int          `json:"total_delta,omitempty"`
-	TotalPerformanceDelta   int          `json:"total_performance_delta,omitempty"`
-	HasProxy                bool         `json:"has_proxy,omitempty"`
-	Games                   []GameResult `json:"games,omitempty"`
+	Status                string       `json:"status"`
+	Competition           string       `json:"competition,omitempty"` // CompetitionLeague, or "" for a tournament
+	Stale                 bool         `json:"stale,omitempty"`
+	Player                *PlayerInfo  `json:"player,omitempty"`
+	Date                  string       `json:"date,omitempty"`
+	TotalDelta            int          `json:"total_delta,omitempty"`
+	TotalPerformanceDelta int          `json:"total_performance_delta,omitempty"`
+	HasProxy              bool         `json:"has_proxy,omitempty"`
+	Games                 []GameResult `json:"games,omitempty"`
 	// Division is only for the job worker's log line, not part of the API.
 	Division string `json:"-"`
 }
@@ -47,6 +48,7 @@ type ScrapeDeps struct {
 	Cache       *cache.Cache
 	ProxyURL    func(string) string
 	Tournaments *db.TournamentStore
+	League      *db.LeagueStore
 }
 
 // ScrapePlayerToday runs the full scrape pipeline (player profile → today's
@@ -163,11 +165,11 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 // team's combined pre-tournament RGX baseline and a delta for each of its games. It is
 // player-independent — both players on the team share these numbers.
 type TeamDayResult struct {
-	TeamRGX                 int          `json:"team_rgx"` // r1 in the RGX formula
-	HasProxy                bool         `json:"has_proxy"`
-	TotalDelta              int          `json:"total_delta"`
-	TotalPerformanceDelta   int          `json:"total_performance_delta"`
-	Games                   []GameResult `json:"games"`
+	TeamRGX               int          `json:"team_rgx"` // r1 in the RGX formula
+	HasProxy              bool         `json:"has_proxy"`
+	TotalDelta            int          `json:"total_delta"`
+	TotalPerformanceDelta int          `json:"total_performance_delta"`
+	Games                 []GameResult `json:"games"`
 }
 
 // ComputeTeamDayResult turns a parsed team schedule plus its division's team list into
@@ -235,10 +237,10 @@ func ComputeTeamDayResult(schedule TeamScheduleResult, divisionTeams []TeamEntry
 
 // --- playerzone fetchers (live or fixture-backed, via deps.Fetcher) ---
 
-// cached looks key up in deps.Cache and counts it as a hit or miss of the
+// cacheLookup looks key up in deps.Cache and counts it as a hit or miss of the
 // named cache. A value of the wrong type should never be stored, but a bad
 // assertion must not panic — it's treated as a miss, so the caller re-fetches.
-func cached[T any](deps ScrapeDeps, name, key string) (T, bool) {
+func cacheLookup[T any](deps ScrapeDeps, name, key string) (T, bool) {
 	v, _ := deps.Cache.Get(key)
 	t, ok := v.(T)
 	result := "miss"
@@ -251,7 +253,7 @@ func cached[T any](deps ScrapeDeps, name, key string) (T, bool) {
 
 func fetchProfileEntries(deps ScrapeDeps, numericID string) ([]ProfileTournamentEntry, error) {
 	cacheKey := "profile:" + numericID
-	if entries, ok := cached[[]ProfileTournamentEntry](deps, "profile", cacheKey); ok {
+	if entries, ok := cacheLookup[[]ProfileTournamentEntry](deps, "profile", cacheKey); ok {
 		return entries, nil
 	}
 
@@ -358,7 +360,7 @@ func matchDivision(divisions []Division, name string) string {
 // as long as a division team list is, since the two are fetched together.
 func fetchTournamentDivisions(deps ScrapeDeps, tournamentID int) ([]Division, error) {
 	cacheKey := fmt.Sprintf("tournament_divisions:%d", tournamentID)
-	if divisions, ok := cached[[]Division](deps, "divisions", cacheKey); ok {
+	if divisions, ok := cacheLookup[[]Division](deps, "divisions", cacheKey); ok {
 		return divisions, nil
 	}
 
@@ -416,7 +418,7 @@ func resolveTournamentGRT(deps ScrapeDeps, tournamentID int, now time.Time) (boo
 
 func fetchDivisionTeamsByPath(deps ScrapeDeps, teamsPath string) ([]TeamEntry, error) {
 	cacheKey := "division_teams:" + teamsPath
-	if teams, ok := cached[[]TeamEntry](deps, "division_teams", cacheKey); ok {
+	if teams, ok := cacheLookup[[]TeamEntry](deps, "division_teams", cacheKey); ok {
 		return teams, nil
 	}
 

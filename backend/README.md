@@ -175,13 +175,23 @@ go run ./cmd/fixturecapture --players "LUC2110,Lucas Christiani"
 
 Captures only what one player's `/today` request fetches, through the real `ScrapePlayerToday`. The ranking pages are fetched once per run and hard-linked into each snapshot, so a weekend of hourly captures doesn't cost a 3.8 MB ranking copy per player per hour.
 
+#### League mode
+
+```sh
+go run ./cmd/fixturecapture --league "59944,59549"
+```
+
+Captures one Deutsche Roundnet Liga team's matchday per team ID — the `{id}` of its `/tournaments/schedule/team/{id}` page. Every roster player runs through the real `ScrapePlayerLeagueToday`, so the snapshot holds what production fetches for that team: its schedule page, the matchday group page of each Begegnung, and for today's Begegnungen the `/ajax/get-subgames/{id}` Partien and the opponents' schedule pages. `report.txt` lists each Begegnung with its date, each Partie with both pairs and sets, every roster, and per player the per-Partie formula intermediates, the pair-delta sum and the player's own change (half of each pair delta) next to their roster RGX.
+
+The roster RGX is the pre-matchday baseline only until playerzone recalculates. Captured again after that, the roster shows the new RGX — which makes a pre- and a post-recalculation capture of the same team the check of the league formula. A team costs about `1 + its Begegnungen + 2 × today's Begegnungen` requests (~20).
+
 #### What a snapshot holds
 
-Snapshots land in `scraper/captures/<YYYY-MM-DD>/<HHMM>-t<tournament-id>/` (or `-<player-id>`):
+Snapshots land in `scraper/captures/<YYYY-MM-DD>/<HHMM>-t<tournament-id>/` (or `-<player-id>`, or `-league-<team-id>`):
 
 | File | Contents |
 |------|----------|
-| `*.html` | Every fetched page |
+| `*.html` | Every fetched page (`subgames-<id>.json` for league Partien) |
 | `manifest.json` | URL path → file, replayed by `scraper.ManifestFetcher` |
 | `capture.json` | Fetched paths, parsed intermediates, computed results, full check findings |
 | `report.txt` | The same rendered for reading: schedule players and their RGX, division teams with combined RGX, every game's `r1`, `r2`, sets, `b`, `p`, `e1` and delta, then the consistency checks |
@@ -194,6 +204,9 @@ go run ./cmd/scrapecheck --player LUC2110 \
 
 go run ./cmd/fixturecapture --tournaments 695 --date 2026-09-12 \
   --from-fixtures ../scraper/captures/2026-09-12/1400-t695
+
+go run ./cmd/fixturecapture --league 59944 --date 2026-10-17 \
+  --from-fixtures ../scraper/captures/2026-10-17/1400-league-59944
 ```
 
 Flags:
@@ -201,6 +214,7 @@ Flags:
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--players` | — | Comma-separated player IDs or full names; omit for tournament mode |
+| `--league` | — | Comma-separated league team IDs; captures their matchday today (takes precedence over `--players`) |
 | `--tournaments` | — | Numeric tournament IDs to capture instead of discovering today's |
 | `--out` | `../scraper/captures` (or `$CAPTURE_DIR`) | Root directory for snapshots |
 | `--divisions` | — | Only capture divisions whose name contains one of these substrings |
@@ -253,7 +267,7 @@ Flags:
 
 Every live request identifies itself as `User-Agent: RGBlitzBot` (see `scraper.DefaultUserAgent`) — a deliberately distinct, non-browser-impersonating name that playerzone can trivially block via robots.txt if they want to.
 
-When `RESPECT_PERMISSION=true`, the app checks whether robots.txt allows `RGBlitzBot` to fetch every page shape it needs (`scraper.RequiredScrapePaths`: home, both ranking tabs, `/tournaments/`) before doing anything else:
+When `RESPECT_PERMISSION=true`, the app checks whether robots.txt allows `RGBlitzBot` to fetch every page shape it needs (`scraper.RequiredScrapePaths`: home, both ranking tabs, `/tournaments/`, `/ajax/`) before doing anything else:
 
 - The weekly (or manually triggered via `cmd/reindex`) player index scrape re-checks robots.txt first. If disallowed, it makes **zero** further requests and just stores the result.
 - The result is persisted in the `scrape_permission` SQLite table (`internal/db/permission.go`) and reused by live `/api/players/:id/today` requests — if the stored result says "disallowed" (or no check has ever run), the API returns `{"status": "no_tournament"}` without touching the network, same as the weekday/time guard.
@@ -333,7 +347,7 @@ cmd/
   seed/        — one-shot DB seeder from ranking.html fixture
   scrapecheck/ — dry-run the scrape → RGX pipeline for one player (dev fixtures or live site)
   rgxcalc/     — pure RGX formula calculator, no network/DB involved
-  fixturecapture/ — snapshot a whole tournament (or one player's scrape) from the live site:
+  fixturecapture/ — snapshot a whole tournament (or one player's scrape, or a league team's matchday) from the live site:
                  the HTML, the parsed intermediates, the computed deltas and cross-checks
   reindex/     — manually re-run the weekly player index scrape against the live site
   checkpermission/ — manually re-check robots.txt and update the stored RESPECT_PERMISSION result

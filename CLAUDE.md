@@ -14,6 +14,7 @@ The `docs/` folder is the spec of record for behaviour not covered below — it'
 | `docs/04-architecture.md`       | Component tree, Go package layout, data flow sequences                    |
 | `docs/05-scraping-algorithm.md` | Step-by-step scraping pseudocode, rate limiting, new-player proxy logic   |
 | `docs/06-api-spec.md`           | Full REST API contract with request/response shapes and polling behaviour |
+| `docs/07-analytics.md`          | Umami events, session properties, privacy rule for tracked data           |
 
 ## Tech stack
 
@@ -37,6 +38,7 @@ Every scrape (cron-triggered, startup-triggered, or via `Scheduler.ScrapeNow()`)
 - **Stale-on-error is not wired up in production.** `TodayResult.Stale` exists and the frontend has a full UI for it (`ResultStale.vue`), but nothing in the real scrape path sets it — a failed job just becomes `status: "error"`. The only place `Stale: true` is produced is the `DEV_MODE` fixture player `dev-stale`. Don't assume a live stale-cache fallback exists; if you're asked to add one, it needs new logic in `internal/jobqueue`.
 - **Image proxy is origin-restricted, not a generic passthrough.** `isAllowedImageOrigin` (`internal/api/handlers.go`) only allows `https://` URLs whose host is exactly `pstaassets.blob.core.windows.net`/`playerzone.roundnetgermany.de` or a proper subdomain of one — never loosen this to a `strings.HasSuffix` check without a label-boundary guard, since Azure blob container names are self-service and a naive suffix check is bypassable (e.g. `evilpstaassets.blob.core.windows.net`).
 - **RgxJob usage stats (`rgx_jobs_stats`) persist independently of `rgx_jobs`.** `rgx_jobs` is purged daily by cron; `rgx_jobs_stats` (`internal/db/stats.go`) is a separate, never-purged table recording one row per _genuinely created_ job (never for a job reused from the dedup/freshness cache, and never for `DEV_MODE` synthetic jobs). `GET /api/stats/rgx-jobs` aggregates it for the frontend footer's all-time usage stat.
+- **The Deutsche Roundnet Liga is not a tournament.** One playerzone tournament spans a whole season; teams are club squads; a matchday's date lives on its matchday group, not the profile; a Begegnung (club vs club) is five pair games ("Partien", from `/ajax/get-subgames/{game_id}`), each an RGX game between the two pairs who played it. Every job first runs `internal/scraper.ScrapePlayerLeagueToday`, which looks the player up in the `league_players` roster index (rebuilt with the player index, and at startup while empty) and falls back to the tournament pipeline when the player isn't on a roster or their team doesn't play today. Regular season only — the April final phases carry no matchday group and are skipped. See `docs/03-data-requirements.md §League Matchdays`.
 - **Only GRT tournaments produce RGX changes.** Other national bodies (e.g. EURA) run tournaments on the same platform; a tournament's own detail page (`/tournaments/{id}-{slug}`) states whether it's GRT via a "German Roundnet Tour {year}" label. `internal/scraper.ScrapePlayerToday` resolves this once per tournament, permanently caching it in the never-purged `tournaments` table (`internal/db/tournaments.go`) — GRT status is assumed fixed forever once a tournament has started, so it's never re-scraped. A non-GRT tournament produces `{status: "no_tournament"}`, identical to no tournament at all.
 
 ## Two playerzone layouts, one set of parsers
@@ -123,6 +125,8 @@ x2 = -x1
 | Tournament detail + division links                       | `/tournaments/{id}-{slug}`                |
 | Division team list (with combined RGX)                   | `/tournaments/{id}-{slug}/teams/{div_id}` |
 | Team game schedule                                       | `/tournaments/schedule/team/{team_id}`    |
+| League matchday group (date, city)                       | `…/schedule/{phase}?…&md_group={id}`      |
+| League Begegnung's Partien (JSON)                        | `/ajax/get-subgames/{game_id}`            |
 
 Player avatars and club logos are on `pstaassets.blob.core.windows.net` — proxy them via `/api/images/proxy`, never serve the CDN URL directly to the browser.
 
@@ -135,15 +139,16 @@ cmd/reindex/        # manual re-run of the player index scrape
 cmd/scrapecheck/    # manual fixture/live scrape smoke test
 cmd/checkpermission/ # manual robots.txt permission check
 cmd/rgxcalc/        # CLI: compute one game's RGX delta from raw inputs, no network/DB
-cmd/fixturecapture/ # CLI: snapshot a whole tournament running today (or one player's scrape)
+cmd/fixturecapture/ # CLI: snapshot a whole tournament running today (or one player's scrape,
+                    # or a league team's matchday with --league)
                     # into a replayable capture dir — HTML + parsed intermediates + deltas +
                     # cross-checks; driven by scripts/capture-fixtures.sh
 internal/api/       # HTTP handlers + router
 internal/scraper/   # HTML parsers, fetcher, rate limiter, robots.txt permission check
 internal/jobqueue/  # single-worker queue that drains RgxJob rows through the scraper
 internal/cache/     # in-memory TTL cache
-internal/db/        # SQLite access layer (PlayerStore, JobStore, JobStatsStore, TournamentStore, PermissionStore)
-internal/cron/      # weekly scrape job + daily RgxJob cleanup (Scheduler)
+internal/db/        # SQLite access layer (PlayerStore, JobStore, JobStatsStore, TournamentStore, LeagueStore, PermissionStore)
+internal/cron/      # weekly scrape job + league roster index + daily RgxJob cleanup (Scheduler)
 internal/config/    # env-based config
 internal/metrics/   # Prometheus metrics; names are a contract with the vps-infra Grafana dashboards
 ```
@@ -170,16 +175,30 @@ components/
   ResultLoading.vue         # job queued/running, shows queue-position phrase
   ResultStale.vue           # retry vs. accept-stale-result (see production gap note above)
   ResultError.vue           # hard failure, no cached fallback
+  UpcomingTournaments.vue   # not-yet-started tournaments under the focused, still-empty search bar
 composables/
   useBattery.ts       # wraps navigator.getBattery() + prefers-reduced-motion, exposes isFastMode
   useTodayResult.ts   # drives job-create → poll-every-2s-until-final-status flow
   useRgxJobStats.ts   # non-blocking (lazy) fetch of /api/stats/rgx-jobs for the footer's served-count stat
+  useTrack.ts         # no-op-safe Umami track/identify wrapper (events: docs/07-analytics.md)
+  useUpcomingTournaments.ts # non-blocking (lazy) fetch of /api/tournaments/upcoming, rendered by UpcomingTournaments.vue
+utils/
+  changelog.ts        # app version + visible releases from changelog.json
 config/
   mood-phrases.ts     # RGX-delta bracket → German phrase map
   queue-phrases.ts    # queue-position bracket → German phrase map
 types/
   api.ts              # shared API response types
 ```
+
+## Versioning & changelog
+
+Every merge to `main` is a release. The `release` job in `.github/workflows/docker-publish.yml` pipes the commits and diff since the last `v*` tag into `claude -p` (prompt and output schema in `scripts/release/`), and `scripts/release/release.mjs` prepends the result to `frontend/changelog.json`. The job then commits `chore: release vX.Y.Z`, tags it, and the images are built from that release commit.
+
+- `frontend/changelog.json` is the single source of truth. Its first entry is the app version shown in the footer (`utils/changelog.ts`), and `/changelog` lists every entry not marked `internal`.
+- The version follows user-visible impact, not API compatibility. Claude picks `minor` (new or noticeably changed feature) or `patch`, and marks releases with no user-visible change `internal`. A major bump happens only when `release:major` appears in a commit message or PR title.
+- CI authenticates with the owner's Claude subscription via the `CLAUDE_CODE_OAUTH_TOKEN` repo secret (`claude setup-token`). Without it, the release job fails and nothing is deployed.
+- Don't edit `changelog.json` by hand in a feature PR. To fix wording, change an existing entry in a separate PR.
 
 ## Environment variables (Go backend)
 

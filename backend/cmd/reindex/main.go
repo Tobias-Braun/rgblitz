@@ -32,6 +32,7 @@ func main() {
 	players := db.NewPlayerStore(database)
 	permissions := db.NewPermissionStore(database)
 	jobs := db.NewJobStore(database)
+	league := db.NewLeagueStore(database)
 	before, err := players.Count()
 	if err != nil {
 		log.Fatalf("count players: %v", err)
@@ -41,7 +42,7 @@ func main() {
 	// playerzone, not a fixture, so the rate limit rule still applies.
 	rateLimiter := scraper.NewRateLimiter(2 * time.Second)
 	fetcher := scraper.NewHTTPFetcher(rateLimiter)
-	scheduler := cron.NewScheduler(players, jobs, fetcher, permissions, cfg.RespectPermission)
+	scheduler := cron.NewScheduler(players, jobs, league, fetcher, permissions, cfg.RespectPermission)
 
 	fmt.Printf("scraping live player index (%d players currently in %q)...\n", before, *dbPath)
 	if err := scheduler.ScrapeNow(); err != nil {

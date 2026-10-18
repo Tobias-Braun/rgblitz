@@ -10,6 +10,8 @@
 | Tournament detail | `/tournaments/{id}-{slug}` (numeric-only `/tournaments/{id}` redirects here) | No | Tournament name, first day's date, and whether it counts towards the German Roundnet Tour (GRT) |
 | Division teams | `/tournaments/{id}-{slug}/teams/{div_id}` | No | All teams in a division with combined RGX + player names |
 | Team schedule | `/tournaments/schedule/team/{team_id}` | No | A single team's games (scores, round, opponents) + a sidebar listing every division in that tournament (name + teams-page link) |
+| Matchday group | `/tournaments/{id}-{slug}/schedule/{phase}?group_id=…&md=…&md_group={id}` | No | League only: date, city and name of one matchday group (only the requested group is rendered) |
+| Partien | `/ajax/get-subgames/{game_id}` | No | League only: JSON whose `html` holds one `rg-game-card[variant=subgame]` per Partie of a Begegnung |
 | Game info | `/tournaments/game-info/{game_id}` | **Yes** | Per-game detail — **behind login, out of scope** |
 
 ---
@@ -290,6 +292,41 @@ The `tournaments` table is permanent (never purged, unlike `rgx_jobs`) — see
 
 ---
 
+### League matchdays — ScrapePlayerLeagueToday
+
+Runs before the tournament pipeline for every job (`internal/jobqueue`). See
+`03-data-requirements.md §League Matchdays` for how the league differs from a tournament.
+
+```
+FUNCTION ScrapePlayerLeagueToday(player, now):
+  membership = league_players[NumericPlayerID(player.id)]
+  IF none: RETURN not handled                      # no playerzone request at all
+
+  ours = schedule page of membership.team_id       # roster with RGX + Begegnungen
+  todays = Begegnungen whose matchday group's date == today
+           (matchday group page per md_group, cached)
+  IF none: RETURN not handled                      # tournament pipeline runs instead
+
+  FOR each Begegnung in todays (in playing order):
+    partien  = GET /ajax/get-subgames/{game_id}
+    opponent = schedule page of the opponent team (roster only)
+    FOR each played Partie whose own-side names resolve to this player:
+      r1 = our pair's RGX sum, r2 = their pair's RGX sum
+           (names resolved uniquely against the rosters; unresolved or 0 → proxy)
+      game = RGX formula(r1, r2, sets)
+  RETURN ok, competition = "league", games
+```
+
+The Begegnung's side order (us first or second) also orients every Partie. A team with
+matchday fixtures but no Partie of the player yet yields `ok` with no games — the
+"registered, not played yet" state.
+
+`internal/scraper.ScrapeLeagueRosters` builds the roster index: upcoming list → the season
+named `Deutsche Roundnet Liga YYYY/YYYY` → its divisions (the season page links only the first;
+each division's team list links all four) → every team's schedule page.
+
+---
+
 ### Cancelled games
 
 playerzone renders a cancelled game (forfeit, injury, etc.) the same way it renders a
@@ -338,6 +375,10 @@ Result:
 | `profile:{numeric_id}` | 60s | In-memory | Parsed tournament entries from a player's profile page |
 | `division_teams:{teams_path}` | 5 min | In-memory | Parsed team list for a division |
 | `tournaments` DB table | Permanent, never re-scraped | SQLite | Tournament id → name, GRT flag, first-day date |
+| `league_players` DB table | Rebuilt Sat/Sun 03:00 | SQLite | League roster index: numeric player id → team, season |
+| `league_schedule:{team_id}` | 6h | In-memory | A league team's roster with RGX + its Begegnungen |
+| `league_md_group:{md_group}` | 6h | In-memory | A matchday group's date, city, name |
+| `league_subgames:{game_id}` | 60s | In-memory | A Begegnung's Partien — the only league data that changes during a matchday |
 | `tournament_result:{player_id}:{date}` | 60s (active) / 24h (finished) | In-memory | Computed game results + delta |
 | image cache file, named from a sanitized original URL | 7 days | Disk (`./cache/images/`) | Proxied image bytes |
 

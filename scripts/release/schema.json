@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "properties": {
+    "bump": { "type": "string", "enum": ["minor", "patch"] },
+    "internal": { "type": "boolean" },
+    "changes": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 4 }
+  },
+  "required": ["bump", "internal", "changes"],
+  "additionalProperties": false
+}

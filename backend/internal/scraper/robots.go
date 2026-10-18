@@ -8,7 +8,7 @@ import (
 
 // RequiredScrapePaths lists one representative path per page shape this app
 // fetches from playerzone. A single "/tournaments/" prefix stands in for
-// tournament detail, division-teams, and team-schedule pages alike, since
+// tournament detail, division-teams, team-schedule and matchday pages alike, since
 // they're all disallowed or allowed together under that prefix in robots.txt.
 // RESPECT_PERMISSION evaluates all of these together and stores one overall
 // verdict — if any of them is disallowed, the bot must not scrape at all.
@@ -17,6 +17,7 @@ var RequiredScrapePaths = []string{
 	RankingOpenPath,
 	RankingWomenPath,
 	"/tournaments/",
+	"/ajax/", // a league Begegnung's Partien, see SubgamesPath
 }
 
 type robotsRule struct {

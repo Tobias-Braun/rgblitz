@@ -33,6 +33,7 @@ func main() {
 	players := db.NewPlayerStore(database)
 	permissions := db.NewPermissionStore(database)
 	jobs := db.NewJobStore(database)
+	league := db.NewLeagueStore(database)
 	jobStats := db.NewJobStatsStore(database)
 	tournaments := db.NewTournamentStore(database)
 	feedback := db.NewFeedbackStore(database)
@@ -44,7 +45,7 @@ func main() {
 
 	fetcher := scraper.NewHTTPFetcher(rateLimiter)
 
-	scheduler := cron.NewScheduler(players, jobs, fetcher, permissions, cfg.RespectPermission)
+	scheduler := cron.NewScheduler(players, jobs, league, fetcher, permissions, cfg.RespectPermission)
 
 	// Guard against serving an empty/stale index on first boot or after a lost
 	// volume — the weekly cron alone wouldn't catch up until the next Saturday.
@@ -62,7 +63,23 @@ func main() {
 	scheduler.Start()
 	defer scheduler.Stop()
 
-	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: memCache, ProxyURL: api.ProxyURL, Tournaments: tournaments}
+	// The league roster index takes minutes (one request per team), so unlike the player
+	// index it is built in the background; league players fall back to the tournament path
+	// until it is done. It parses scraped pages, hence the recover.
+	if n, err := league.Count(); err == nil && n == 0 {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("initial league roster index panicked", "panic", r)
+				}
+			}()
+			if err := scheduler.ScrapeLeagueNow(); err != nil {
+				slog.Error("initial league roster index failed", "error", err)
+			}
+		}()
+	}
+
+	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: memCache, ProxyURL: api.ProxyURL, Tournaments: tournaments, League: league}
 	queue := jobqueue.New(jobs, jobStats, players, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
 
 	// Recover any job left "running" by a crash mid-scrape, then start the

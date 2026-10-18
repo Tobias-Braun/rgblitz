@@ -44,6 +44,8 @@ export interface Game {
 
 export interface TodayResultOk {
   status: "ok";
+  // Set when the games are Partien of a league matchday, omitted for a tournament.
+  competition?: "league";
   stale?: boolean;
   player: PlayerRef;
   date: string;
@@ -87,6 +89,15 @@ export interface RgxJobStats {
   created: number;
   succeeded: number;
   failed: number;
+}
+
+// GET /api/tournaments/upcoming — soonest first. Dates are YYYY-MM-DD.
+export interface UpcomingTournament {
+  id: number;
+  name: string;
+  location: string;
+  start_date: string;
+  end_date: string;
 }
 
 // POST /api/feedback

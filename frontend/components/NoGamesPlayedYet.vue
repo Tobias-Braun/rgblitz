@@ -1,7 +1,7 @@
 <!--
-  Player is in an active tournament today but the schedule page has no games
-  yet (backend omits `games`/`total_delta` entirely — see
-  scraper.ScrapePlayerToday). Distinct from State 2 (no tournament at all):
+  Player is in an active tournament (or their league team plays a matchday) today
+  but has no games yet (backend omits `games`/`total_delta` entirely — see
+  scraper.ScrapePlayerToday and scraper.ScrapePlayerLeagueToday). Distinct from State 2 (no tournament at all):
   here we keep the player chip + a manual refresh, since games can appear at
   any moment.
 -->
@@ -11,6 +11,7 @@ import type { PlayerRef } from "~/types/api";
 
 const props = defineProps<{
   player: PlayerRef;
+  league?: boolean;
   refreshing?: boolean;
   lastFetchedAt?: Date | null;
   jobFinishedAt?: Date | null;
@@ -69,7 +70,11 @@ const jobFinishedAtLabel = computed(() => {
         </svg>
       </div>
       <p class="message">Noch keine Spiele heute</p>
-      <p class="hint">
+      <p v-if="league" class="hint">
+        Dein Team hat heute einen Liga-Spieltag, aber es wurde noch keine
+        Partie mit dir erfasst. Schau später noch mal rein.
+      </p>
+      <p v-else class="hint">
         Du bist für ein Turnier eingetragen, aber es wurden noch keine
         Ergebnisse erfasst. Schau später noch mal rein.
       </p>

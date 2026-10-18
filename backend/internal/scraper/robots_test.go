@@ -58,7 +58,8 @@ func TestParseRobotsTxt_RealFile(t *testing.T) {
 func TestCheckPermission_RealFile(t *testing.T) {
 	rules := scraper.ParseRobotsTxt(strings.NewReader(realRobotsTxt))
 	for _, p := range scraper.RequiredScrapePaths {
-		if p == "/" {
+		// The real robots.txt covers neither the home page nor the AJAX endpoints.
+		if p == "/" || p == "/ajax/" {
 			continue
 		}
 		if rules.Allowed(scraper.DefaultUserAgent, p) {

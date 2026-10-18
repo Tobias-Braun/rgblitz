@@ -55,7 +55,7 @@ func TestScrapePlayerIndex_RespectsDisallowedRobotsTxt(t *testing.T) {
 		"/robots.txt": "User-agent: *\nDisallow: /ranking\nDisallow: /tournaments/*\n",
 	}}
 
-	scheduler := cron.NewScheduler(players, newTestJobStore(t), fetcher, permissions, true)
+	scheduler := cron.NewScheduler(players, newTestJobStore(t), nil, fetcher, permissions, true)
 	if err := scheduler.ScrapeNow(); err != nil {
 		t.Fatalf("ScrapeNow: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestScrapePlayerIndex_IgnoresRobotsWhenFlagOff(t *testing.T) {
 	}}
 
 	// respectPermission=false: robots.txt must never even be fetched.
-	scheduler := cron.NewScheduler(players, newTestJobStore(t), fetcher, nil, false)
+	scheduler := cron.NewScheduler(players, newTestJobStore(t), nil, fetcher, nil, false)
 	_ = scheduler.ScrapeNow()
 
 	for _, p := range fetcher.fetched {

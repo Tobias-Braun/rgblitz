@@ -57,6 +57,7 @@ Covers single-set, best-of-3, and best-of-5 formats:
 
 - Both players on the **winning** team receive `+x1` each.
 - Both players on the **losing** team receive `+x2` (= `-x1`) each.
+- In a league Begegnung, each **Partie** is one such game between two pairs: `r1`/`r2` are the RGX sums of the two pairs who played that Partie, not of the whole squads (see §League Matchdays).
 - All games in a tournament day use the **pre-game RGX values** as `r1`/`r2` inputs — the player's RGX does not change between games within the same day.
 - The displayed daily delta is the **sum** of all per-game `x1` values computed against the fixed pre-tournament baseline.
 - **No division caps apply.** Division RGX limits were removed; `total_delta` is a plain sum of per-game deltas with nothing clamped afterwards.
@@ -151,6 +152,44 @@ the analogous rationale):
   fixed for good once the tournament has started, so there is no TTL and no refresh path.
 - A non-GRT tournament produces `{status: "no_tournament"}` — identical to the player
   having no tournament at all today. No RGX deltas are computed for it.
+
+---
+
+## League Matchdays (Deutsche Roundnet Liga)
+
+The Deutsche Roundnet Liga (DRL) runs on the same platform but differs from a tournament
+in every dimension the tournament pipeline relies on:
+
+| | Tournament | DRL |
+|---|---|---|
+| Tournament entity | one weekend | one per season (e.g. `793`, "Deutsche Roundnet Liga 2026/2027"), four divisions |
+| Date | the profile entry's date | per **matchday group** (`.md-group-header` on the phase schedule page); the profile entry carries only one season date |
+| Team | a pair | a club squad of 8–18 players |
+| Game | pair vs pair | a **Begegnung** (club vs club) of five **Partien**: Open 1, Open 2, Women, Mixed 1, Mixed 2 |
+| Who played | the pair | per Partie, from `/ajax/get-subgames/{game_id}` (surnames, with an initial where needed) |
+| GRT label | yes | none — it is never classified as GRT, and it is not looked up in `tournaments` |
+
+Every Partie counts towards RGX, which playerzone recalculates after each matchday, so the
+pre-matchday RGX shown on the rosters is the fixed baseline for the day, as for a tournament.
+Only the regular season is supported; the final phases (Final Six, Elite Eight, Champions Cup)
+carry no matchday group and are skipped.
+
+A roster index, `league_players`, maps playerzone's numeric player ID to the player's team
+(tournament registration ID) in the current season:
+
+| Field | Meaning |
+|-------|---------|
+| `player_id` | Bare numeric playerzone player ID (the only ID a roster links) |
+| `team_id` | The team's registration ID — the `{team_id}` of its schedule page |
+| `tournament_id` | The season's tournament ID |
+
+**Write rules**: rebuilt Saturday and Sunday 03:00 CET right after the player index, and once
+at startup (in the background) while empty. Rows of earlier seasons are dropped; a team whose
+roster failed to load keeps its earlier rows.
+
+**Read rules**: every job checks it first. A player on a roster whose team plays today gets
+league results (`competition: "league"`), one game per Partie the player played. A player not on
+any roster, or whose team doesn't play today, goes through the tournament pipeline unchanged.
 
 ---
 

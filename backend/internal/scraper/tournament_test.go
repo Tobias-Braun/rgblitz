@@ -1,6 +1,7 @@
 package scraper_test
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -268,6 +269,21 @@ func TestParseTeamSchedule_KeepsCancelledGames(t *testing.T) {
 	}
 	if len(gr.Sets) != 1 || gr.Sets[0].OurScore != 1 || gr.Sets[0].OpponentScore != 0 {
 		t.Errorf("cancelled game oriented sets: got %+v", gr.Sets)
+	}
+}
+
+// A game without set scores (e.g. cancelled before a set finished) must serialize sets as
+// [] — the frontend reads game.sets.length and crashes on null.
+func TestGameResultFromCard_NoSetsSerializesEmptyArray(t *testing.T) {
+	for _, cancelled := range []bool{false, true} {
+		gr := scraper.GameResultFromCard(scraper.GameCard{WasCancelled: cancelled}, 2400, 2400, false)
+		b, err := json.Marshal(gr)
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		if !strings.Contains(string(b), `"sets":[]`) {
+			t.Errorf("cancelled=%v: got %s, want \"sets\":[]", cancelled, b)
+		}
 	}
 }
 

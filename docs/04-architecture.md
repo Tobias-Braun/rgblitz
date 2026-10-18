@@ -92,10 +92,11 @@ internal/
     tournament.go # parses a team schedule page into per-game RGX deltas
     tournament_detail.go # parses a tournament's own detail page for its name/date/GRT status
     orchestrate.go # ScrapePlayerToday — the full home→tournament→division→schedule hop, run off the request path
+    league*.go    # Deutsche Roundnet Liga: matchday/Partie parsers, ScrapePlayerLeagueToday, the roster index scrape
   jobqueue/       # single-worker queue draining RgxJob rows through the shared rate limiter
   cache/          # in-memory TTL cache for tournament results + images
-  db/             # database access layer (player index, RgxJob store, permanent RgxJob usage-stats store, permanent tournament classification store, permission store)
-  cron/           # weekly player-index scrape + daily RgxJob cleanup scheduler
+  db/             # database access layer (player index, RgxJob store, permanent RgxJob usage-stats store, permanent tournament classification store, league roster index, permission store)
+  cron/           # weekly player-index scrape + league roster index + daily RgxJob cleanup scheduler
   metrics/        # Prometheus metrics (package-level vars) + DB collector, served on METRICS_PORT
   config/         # env-based config (port, DB path, scrape interval, etc.)
 ```

@@ -2,15 +2,20 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Game } from '~/types/api'
+import { useTrack } from '~/composables/useTrack'
 
 const props = defineProps<{
   games: Game[]
+  // League rows name their Partie ("Open 1 · 1. Matchday #2"); tournament rows don't need it.
+  showRound?: boolean
 }>()
 
 const isOpen = ref(false)
+const { track } = useTrack()
 
 function toggle() {
   isOpen.value = !isOpen.value
+  if (isOpen.value) track('games-expand')
 }
 </script>
 
@@ -38,7 +43,12 @@ function toggle() {
     </button>
     <div class="panel" :class="{ open: isOpen }">
       <div class="panel-inner">
-        <GameRow v-for="(game, index) in props.games" :key="index" :game="game" />
+        <GameRow
+          v-for="(game, index) in props.games"
+          :key="index"
+          :game="game"
+          :show-round="props.showRound"
+        />
       </div>
     </div>
   </div>

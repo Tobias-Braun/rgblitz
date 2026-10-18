@@ -59,9 +59,13 @@ type TeamScheduleResult struct {
 
 // TeamPlayer is a player card shown on the team schedule page.
 type TeamPlayer struct {
-	Name string
-	RGX  int
+	NumericID string // playerzone's numeric player ID, "" if the card links no profile
+	Name      string
+	RGX       int
 }
+
+// reProfileHref matches a player profile link, e.g. /players/2329-jonas-ka.
+var reProfileHref = regexp.MustCompile(`^/players/(\d+)`)
 
 // SetResult is one set's score, oriented so OurScore/OpponentScore are always
 // from our team's perspective regardless of which side playerzone listed first.
@@ -79,16 +83,16 @@ type GameResult struct {
 	// the RGX formula used for this game. TeamRGX is fixed across all of a
 	// player's games today; OpponentRGX varies per game/opponent. Team names
 	// are set by the caller (OurTeamName here, OpponentName above).
-	OurTeamName         string      `json:"our_team_name"`
-	TeamRGX             int         `json:"team_rgx"`
-	OpponentRGX         int         `json:"opponent_rgx"`
-	RGXDelta            int         `json:"rgx_delta"`
-	RGXDeltaPerPlayer   float32     `json:"rgx_delta_per_player"`
-	PerformanceDelta    int         `json:"performance_delta"`
-	PerformanceDeltaPerPlayer float32 `json:"performance_delta_per_player"`
-	HasProxy            bool        `json:"has_proxy"`
-	WasCancelled        bool        `json:"was_cancelled"`
-	Sets                []SetResult `json:"sets"`
+	OurTeamName               string      `json:"our_team_name"`
+	TeamRGX                   int         `json:"team_rgx"`
+	OpponentRGX               int         `json:"opponent_rgx"`
+	RGXDelta                  int         `json:"rgx_delta"`
+	RGXDeltaPerPlayer         float32     `json:"rgx_delta_per_player"`
+	PerformanceDelta          int         `json:"performance_delta"`
+	PerformanceDeltaPerPlayer float32     `json:"performance_delta_per_player"`
+	HasProxy                  bool        `json:"has_proxy"`
+	WasCancelled              bool        `json:"was_cancelled"`
+	Sets                      []SetResult `json:"sets"`
 }
 
 // reTournamentTeamIDOnclick matches onclick="load_team_info(\d+, 60615)" and captures the
@@ -108,6 +112,10 @@ var reTournamentHref = regexp.MustCompile(`^/tournaments/(\d+)-`)
 // tournament-scoped links every tournament page carries (its navigation identity link, its
 // tabs, its division links). It's what identifies the tournament when the page doesn't
 // render a division sidebar to take the ID from.
+//
+// The site-wide navigation (rg-navigation) precedes those links on every page and links
+// other tournaments — the current league season under "League", upcoming tournaments in a
+// dropdown — so it is skipped.
 func ParseTournamentID(r io.Reader) (int, error) {
 	doc, err := goquery.NewDocumentFromReader(r)
 	if err != nil {
@@ -116,6 +124,9 @@ func ParseTournamentID(r io.Reader) (int, error) {
 
 	found := 0
 	doc.Find("[href]").EachWithBreak(func(_ int, a *goquery.Selection) bool {
+		if a.Closest("rg-navigation").Length() > 0 {
+			return true
+		}
 		href, _ := a.Attr("href")
 		m := reTournamentHref.FindStringSubmatch(href)
 		if len(m) < 2 {
@@ -362,7 +373,8 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 
 	// Parse each player card on the page — these are our team's players with individual RGX.
 	doc.Find("div.player-card").Each(func(_ int, card *goquery.Selection) {
-		name := strings.TrimSpace(card.Find("div.info-player-name a").First().Text())
+		nameLink := card.Find("div.info-player-name a").First()
+		name := strings.TrimSpace(nameLink.Text())
 		// HTML-encoded quotes in names (like Joceline &quot;Jocie&quot;) come through decoded by goquery.
 		name = cleanPlayerName(name)
 		if name == "" {
@@ -372,7 +384,12 @@ func ParseTeamSchedule(r io.Reader, ourTeamID int) (TeamScheduleResult, error) {
 		// player cards at all, since RGX doesn't apply to them — firstField
 		// returns "" rather than panicking, which strconv.Atoi below turns into
 		// rgx 0, and the caller's proxy-RGX fallback (spRGX <= 0) takes it from there.
-		result.Players = append(result.Players, TeamPlayer{Name: name, RGX: rgxFromBadge(card)})
+		href, _ := nameLink.Attr("href")
+		numericID := ""
+		if m := reProfileHref.FindStringSubmatch(href); len(m) >= 2 {
+			numericID = m[1]
+		}
+		result.Players = append(result.Players, TeamPlayer{NumericID: numericID, Name: name, RGX: rgxFromBadge(card)})
 	})
 
 	if len(result.Players) == 0 {
@@ -608,12 +625,12 @@ func DivisionStartingRGX(divisionName string) int {
 // RGXBreakdown exposes every intermediate value of the RGX formula, useful for displaying
 // or debugging a single game's calculation (see cmd/rgxcalc).
 type RGXBreakdown struct {
-	B                  float64 // 1.0 for Best-of-3, 0.75 for single-set
-	P                  float64 // match outcome value, see MatchP
-	E1                 float64 // expected score for our team given r1/r2
-	Delta              int     // rounded RGX delta for our team
-	PerformanceE1      float64 // expected score using d=350
-	PerformanceDelta   int     // rounded performance delta for our team
+	B                float64 // 1.0 for Best-of-3, 0.75 for single-set
+	P                float64 // match outcome value, see MatchP
+	E1               float64 // expected score for our team given r1/r2
+	Delta            int     // rounded RGX delta for our team
+	PerformanceE1    float64 // expected score using d=350
+	PerformanceDelta int     // rounded performance delta for our team
 }
 
 // ComputeDeltaBreakdown computes the RGX formula for a single game and returns every
@@ -640,12 +657,12 @@ func ComputeDeltaBreakdown(r1, r2, setsWon, setsLost int) RGXBreakdown {
 	performanceDelta := b * 50.0 * (p - performanceE1)
 
 	return RGXBreakdown{
-		B:                  b,
-		P:                  p,
-		E1:                 e1,
-		Delta:              int(math.Round(delta)),
-		PerformanceE1:      performanceE1,
-		PerformanceDelta:   int(math.Round(performanceDelta)),
+		B:                b,
+		P:                p,
+		E1:               e1,
+		Delta:            int(math.Round(delta)),
+		PerformanceE1:    performanceE1,
+		PerformanceDelta: int(math.Round(performanceDelta)),
 	}
 }
 

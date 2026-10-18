@@ -6,7 +6,11 @@ import { deltaTone, formatDelta } from "~/utils/format";
 
 const props = defineProps<{
   game: Game;
+  showRound?: boolean;
 }>();
+
+// The API has sent `sets: null` before (#11); that must not break the whole result view.
+const sets = computed(() => props.game.sets ?? []);
 
 const tone = computed(() =>
   props.game.was_cancelled
@@ -17,6 +21,7 @@ const tone = computed(() =>
 
 <template>
   <div class="game-row" :class="{ cancelled: game.was_cancelled }">
+    <span v-if="showRound && game.round" class="round">{{ game.round }}</span>
     <div class="teams">
       <span class="team">{{ game.our_team_name }} ({{ game.team_rgx }})</span>
       <span class="team-sep">vs</span>
@@ -28,10 +33,10 @@ const tone = computed(() =>
       }}</span>
       <div class="details">
         <span class="opponent">{{ game.opponent_name }}</span>
-        <span v-if="game.was_cancelled || game.sets.length" class="meta">
+        <span v-if="game.was_cancelled || sets.length" class="meta">
           <span v-if="game.was_cancelled">Abgesagt</span>
-          <span v-if="game.sets.length" class="chips">
-            <span v-for="(set, index) in game.sets" :key="index" class="chip">
+          <span v-if="sets.length" class="chips">
+            <span v-for="(set, index) in sets" :key="index" class="chip">
               {{ set.our_score }}:{{ set.opponent_score }}
             </span>
           </span>
@@ -74,6 +79,14 @@ const tone = computed(() =>
 }
 
 .team {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.round {
+  font: 600 11px/1.3 var(--font-mono);
+  color: var(--text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

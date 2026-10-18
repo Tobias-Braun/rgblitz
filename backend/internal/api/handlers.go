@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -50,6 +51,7 @@ type Handler struct {
 	queue       *jobqueue.Queue
 	feedback    *db.FeedbackStore
 	notifier    FeedbackNotifier
+	upcomingMu  sync.Mutex
 
 	// Now returns the current time; defaults to time.Now. Overridable in tests so the
 	// weekday/time-window guard in TodayResult can be exercised deterministically.
@@ -134,9 +136,10 @@ var devSpecialPlayers = []devSpecialPlayer{
 	{id: "dev-stale", name: "STALE", clubName: "Dev Fixtures", rgx: 1400},
 	{id: "dev-error", name: "ERROR", clubName: "Dev Fixtures", rgx: 1400},
 	{id: "dev-loading", name: "LOADING", clubName: "Dev Fixtures", rgx: 1400},
+	{id: "dev-league", name: "LEAGUE", clubName: "Dev Fixtures", rgx: 1400},
 }
 
-// matchingDevSpecialPlayers returns the fixture players whose name (ok/stale/error/loading)
+// matchingDevSpecialPlayers returns the fixture players whose name (ok/stale/error/loading/league)
 // occurs in q, case-insensitively.
 func matchingDevSpecialPlayers(q string) []playerSearchResult {
 	lower := strings.ToLower(q)
@@ -382,9 +385,9 @@ func (h *Handler) scrapeDeps() scraper.ScrapeDeps {
 
 // devSpecialJobResponse creates (or reuses/refreshes, via the same dedup and
 // 15-min freshness rules as real players) an RgxJob for one of the magic
-// dev-mode search results (dev-ok/dev-stale/dev-error/dev-loading), entirely
+// dev-mode search results (dev-ok/dev-stale/dev-error/dev-loading/dev-league), entirely
 // independent of the DB player table and the real scrape pipeline so it
-// works even though the player was never indexed. dev-ok/dev-stale/dev-error
+// works even though the player was never indexed. dev-ok/dev-stale/dev-error/dev-league
 // resolve the job synchronously before responding ("immediately completed");
 // dev-loading resolves it in the background after devLoadingDelay, so the
 // frontend exercises the real queued/running -> done polling flow.
@@ -463,7 +466,7 @@ func (h *Handler) resolveDevSpecialJob(sp devSpecialPlayer, jobID int64, now tim
 }
 
 // buildDevSpecialResult renders the hardcoded ok/stale games fixture shared by
-// dev-ok/dev-stale/dev-loading.
+// dev-ok/dev-stale/dev-loading, or a league matchday's Partien for dev-league.
 func (h *Handler) buildDevSpecialResult(sp devSpecialPlayer, now time.Time) TodayResponse {
 	pInfo := &PlayerInfo{
 		ID:       sp.id,
@@ -478,6 +481,15 @@ func (h *Handler) buildDevSpecialResult(sp devSpecialPlayer, now time.Time) Toda
 		computeDevGameResult("Gr. A #2", "Team Süd", "Dev Fixtures Team", ourTeamRGX, 2818, 0, 2),
 		computeDevGameResult("HF #1", "Team West", "Dev Fixtures Team", ourTeamRGX, 2778, 2, 1),
 	}
+	competition := ""
+	if sp.id == "dev-league" {
+		// One Partie per Begegnung, each with a different partner, as a league player plays them.
+		competition = scraper.CompetitionLeague
+		games = []GameResult{
+			computeDevGameResult("Open 1 · 1. Matchday #1", "Nord/Süd (Team Nord)", "League/Partner", 2900, 3100, 2, 1),
+			computeDevGameResult("Mixed 1 · 1. Matchday #2", "West/Ost (Team West)", "League/Partnerin", 2700, 2650, 0, 2),
+		}
+	}
 	totalDelta := 0
 	totalPerformanceDelta := 0
 	for _, g := range games {
@@ -487,6 +499,7 @@ func (h *Handler) buildDevSpecialResult(sp devSpecialPlayer, now time.Time) Toda
 
 	return TodayResponse{
 		Status:                "ok",
+		Competition:           competition,
 		Stale:                 sp.id == "dev-stale",
 		Player:                pInfo,
 		Date:                  now.Format("2006-01-02"),
@@ -547,7 +560,6 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 			Round:        rounds[i%len(rounds)],
 			OpponentName: team[0].Name + " / " + team[1].Name,
 			WeAreTeamOne: true,
-			SetScores:    fakeSetScores(setsWon, setsLost, rng),
 			Outcome:      outcomeWord(setsWon, setsLost),
 		}
 
@@ -556,6 +568,7 @@ func (h *Handler) buildDevResponse(player *db.Player, now time.Time) TodayRespon
 		totalDelta += breakdown.Delta
 		totalPerformanceDelta += breakdown.PerformanceDelta
 		games = append(games, GameResult{
+			Sets:                      fakeSetScores(setsWon, setsLost, rng),
 			Round:                     card.Round,
 			OpponentName:              card.OpponentName,
 			OurTeamName:               ourTeamName,
@@ -585,13 +598,13 @@ func randomOutcome(rng *rand.Rand) (won, lost int) {
 	return c[0], c[1]
 }
 
-func fakeSetScores(won, lost int, rng *rand.Rand) []scraper.SetScore {
-	var sets []scraper.SetScore
+func fakeSetScores(won, lost int, rng *rand.Rand) []scraper.SetResult {
+	sets := make([]scraper.SetResult, 0, won+lost)
 	for i := 0; i < won; i++ {
-		sets = append(sets, scraper.SetScore{TeamOneScore: 21, TeamTwoScore: 15 + rng.Intn(5)})
+		sets = append(sets, scraper.SetResult{OurScore: 21, OpponentScore: 15 + rng.Intn(5)})
 	}
 	for i := 0; i < lost; i++ {
-		sets = append(sets, scraper.SetScore{TeamOneScore: 15 + rng.Intn(5), TeamTwoScore: 21})
+		sets = append(sets, scraper.SetResult{OurScore: 15 + rng.Intn(5), OpponentScore: 21})
 	}
 	return sets
 }
