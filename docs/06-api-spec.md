@@ -58,7 +58,7 @@ Gets or creates today's `RgxJob` for this player and returns it immediately — 
 - If a job for this player+day is already `queued` or `running`, that same job is returned (no duplicate is created).
 - If the latest job is `done` and finished **less than 15 minutes ago**, its cached result is returned immediately — no new scrape.
 - If the latest job is `done` but **older than 15 minutes**, or `error`, a new job is created and enqueued (refresh/retry).
-- Outside the tournament window (weekday, or before 08:00 CET on a weekend) or when a robots.txt check disallows scraping, `status: "no_tournament"` is returned directly — no job is ever created.
+- Outside the tournament window (weekday, or 02:00–08:00 CET on a weekend — a weekend day's window runs until 02:00 the next morning, and requests before 02:00 get the previous day's results) or when a robots.txt check disallows scraping, `status: "no_tournament"` is returned directly — no job is ever created.
 
 **Response `200 OK` — job created or already in flight**
 

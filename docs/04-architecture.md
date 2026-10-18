@@ -125,7 +125,8 @@ internal/
 6. User selects a player → player.id stored in reactive state
 7. ResultView mounts, calls GET /api/players/{id}/today
 8. Go handler:
-   a. Checks current CET time — outside the weekend/08:00 window, or robots.txt
+   a. Checks current CET time — outside the weekend window (08:00 until 02:00
+      the next morning), or robots.txt
       disallows scraping → return {status: "no_tournament"} immediately, no
       RgxJob is created
    b. Otherwise, look up today's RgxJob for this player:

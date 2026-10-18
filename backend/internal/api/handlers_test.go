@@ -385,6 +385,50 @@ func TestTodayResult_WeekendBeforeWindow_NoNetwork(t *testing.T) {
 	}
 }
 
+// A weekend day's results stay reachable until 02:00 the next morning.
+func TestTodayResult_DayRollover(t *testing.T) {
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name     string
+		now      time.Time
+		wantDate string // "" when no job may be created
+	}{
+		{"Sunday 01:30 is still Saturday", time.Date(2026, 7, 19, 1, 30, 0, 0, berlin), "2026-07-18"},
+		{"Monday 01:30 is still Sunday", time.Date(2026, 7, 20, 1, 30, 0, 0, berlin), "2026-07-19"},
+		{"Sunday 23:30 is Sunday", time.Date(2026, 7, 19, 23, 30, 0, 0, berlin), "2026-07-19"},
+		{"Sunday 02:30 is before the window", time.Date(2026, 7, 19, 2, 30, 0, 0, berlin), ""},
+		{"Monday 02:30 is a weekday", time.Date(2026, 7, 20, 2, 30, 0, 0, berlin), ""},
+		{"Saturday 01:30 is still Friday", time.Date(2026, 7, 18, 1, 30, 0, 0, berlin), ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _, _, jobs, _ := newTestHandler(t, scraper.NewFixtureFetcher(fixtureDir), nil)
+			h.Now = func() time.Time { return tc.now }
+
+			rec := httptest.NewRecorder()
+			api.NewRouter(h).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/players/"+testPlayerID+"/today", nil))
+			var resp api.JobResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode: %v (body %s)", err, rec.Body.String())
+			}
+
+			if tc.wantDate == "" {
+				if resp.Status != "no_tournament" {
+					t.Errorf("status = %q, want no_tournament", resp.Status)
+				}
+				return
+			}
+			job, err := jobs.LatestForPlayerDate(testPlayerID, tc.wantDate)
+			if err != nil || job == nil {
+				t.Errorf("no job for %s (response %q, err %v)", tc.wantDate, resp.Status, err)
+			}
+		})
+	}
+}
+
 func TestTodayResult_RespectPermission_BlocksWhenDisallowed(t *testing.T) {
 	cfg := &config.Config{RespectPermission: true}
 	h, _, permissions, _, _ := newTestHandler(t, noNetworkFetcher{t}, cfg)

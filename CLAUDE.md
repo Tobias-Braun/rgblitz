@@ -30,7 +30,7 @@ Every scrape (cron-triggered, startup-triggered, or via `Scheduler.ScrapeNow()`)
 
 ## Key domain rules (non-obvious, will cause bugs if missed)
 
-- **Tournaments are Saturday/Sunday only.** Return `{status: "no_tournament"}` immediately on weekdays without touching playerzone.
+- **Tournaments are Saturday/Sunday only.** Return `{status: "no_tournament"}` immediately on weekdays without touching playerzone. A competition day lasts until 02:00 the next morning (`scraper.CompetitionDay`): a request at 01:30 on Sunday or Monday gets Saturday's or Sunday's results.
 - **RGX inputs are pre-tournament and fixed for the whole day.** Do not update `r1`/`r2` between games — all games use the same baseline. `total_delta` is the plain sum of per-game deltas — no division caps apply.
 - **New players** (no RGX in DB) get their division's starting value as a proxy (Beginner/Basic 1000, Intermediate 1100, Advanced 1250, Contender 1400, Pro 1600, unknown 1200). Contender is distinct from Pro. Set `has_proxy: true` on affected game results.
 - **Rate limit**: max 1 outbound request to playerzone every 2 seconds, enforced by a single shared `RateLimiter` (`internal/scraper/rate_limiter.go`) — every scraper and the job-queue worker go through the same instance.
