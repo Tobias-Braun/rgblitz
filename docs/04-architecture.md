@@ -92,11 +92,13 @@ internal/
     tournament.go # parses a team schedule page into per-game RGX deltas
     tournament_detail.go # parses a tournament's own detail page for its name/date/GRT status
     orchestrate.go # ScrapePlayerToday — the full home→tournament→division→schedule hop, run off the request path
+    fetchers.go   # the page fetchers that hop uses, each behind the in-memory cache (counted in rgblitz_scraper_cache_total)
     league*.go    # Deutsche Roundnet Liga: matchday/Partie parsers, ScrapePlayerLeagueToday, the roster index scrape
   jobqueue/       # single-worker queue draining RgxJob rows through the shared rate limiter
   cache/          # in-memory TTL cache for tournament results + images
   db/             # database access layer (player index, RgxJob store, permanent RgxJob usage-stats store, permanent tournament classification store, league roster index, permission store)
   cron/           # weekly player-index scrape + league roster index + daily RgxJob cleanup scheduler
+  metrics/        # Prometheus metrics (package-level vars) + DB collector, served on METRICS_PORT
   config/         # env-based config (port, DB path, scrape interval, etc.)
 ```
 
@@ -107,6 +109,7 @@ internal/
 - **Database**: SQLite via `modernc.org/sqlite` — pure Go, no cgo, a single file on disk. No plan to swap to a client/server database; the whole dataset is small and single-writer
 - **In-memory cache**: `github.com/patrickmn/go-cache` for TTL'd tournament results
 - **Cron**: `github.com/robfig/cron/v3`
+- **Observability**: `github.com/prometheus/client_golang` metrics on a separate `/metrics` listener (`METRICS_PORT`, never on the public router); `log/slog` JSON logs on stdout
 - **Image proxy**: plain `net/http` client fetch (not a reverse proxy — the handler reads the upstream response fully, then writes it out) with a local disk cache under `./cache/images/`
 
 ---
@@ -164,6 +167,7 @@ internal/
 - SQLite database file on persistent volume
 - Environment variables for configuration (no hardcoded secrets):
   - `PORT` (default 8080)
+  - `METRICS_PORT` (default 9090) — Prometheus `/metrics`, keep it off the public ingress
   - `DB_PATH` (default `./data/players.db`)
   - `IMAGE_CACHE_DIR` (default `./cache/images`)
   - `TZ` must be set to `Europe/Berlin`

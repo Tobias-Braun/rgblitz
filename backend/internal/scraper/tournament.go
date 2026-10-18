@@ -83,16 +83,16 @@ type GameResult struct {
 	// the RGX formula used for this game. TeamRGX is fixed across all of a
 	// player's games today; OpponentRGX varies per game/opponent. Team names
 	// are set by the caller (OurTeamName here, OpponentName above).
-	OurTeamName         string      `json:"our_team_name"`
-	TeamRGX             int         `json:"team_rgx"`
-	OpponentRGX         int         `json:"opponent_rgx"`
-	RGXDelta            int         `json:"rgx_delta"`
-	RGXDeltaPerPlayer   float32     `json:"rgx_delta_per_player"`
-	PerformanceDelta    int         `json:"performance_delta"`
-	PerformanceDeltaPerPlayer float32 `json:"performance_delta_per_player"`
-	HasProxy            bool        `json:"has_proxy"`
-	WasCancelled        bool        `json:"was_cancelled"`
-	Sets                []SetResult `json:"sets"`
+	OurTeamName               string      `json:"our_team_name"`
+	TeamRGX                   int         `json:"team_rgx"`
+	OpponentRGX               int         `json:"opponent_rgx"`
+	RGXDelta                  int         `json:"rgx_delta"`
+	RGXDeltaPerPlayer         float32     `json:"rgx_delta_per_player"`
+	PerformanceDelta          int         `json:"performance_delta"`
+	PerformanceDeltaPerPlayer float32     `json:"performance_delta_per_player"`
+	HasProxy                  bool        `json:"has_proxy"`
+	WasCancelled              bool        `json:"was_cancelled"`
+	Sets                      []SetResult `json:"sets"`
 }
 
 // reTournamentTeamIDOnclick matches onclick="load_team_info(\d+, 60615)" and captures the
@@ -625,12 +625,12 @@ func DivisionStartingRGX(divisionName string) int {
 // RGXBreakdown exposes every intermediate value of the RGX formula, useful for displaying
 // or debugging a single game's calculation (see cmd/rgxcalc).
 type RGXBreakdown struct {
-	B                  float64 // 1.0 for Best-of-3, 0.75 for single-set
-	P                  float64 // match outcome value, see MatchP
-	E1                 float64 // expected score for our team given r1/r2
-	Delta              int     // rounded RGX delta for our team
-	PerformanceE1      float64 // expected score using d=350
-	PerformanceDelta   int     // rounded performance delta for our team
+	B                float64 // 1.0 for Best-of-3, 0.75 for single-set
+	P                float64 // match outcome value, see MatchP
+	E1               float64 // expected score for our team given r1/r2
+	Delta            int     // rounded RGX delta for our team
+	PerformanceE1    float64 // expected score using d=350
+	PerformanceDelta int     // rounded performance delta for our team
 }
 
 // ComputeDeltaBreakdown computes the RGX formula for a single game and returns every
@@ -657,12 +657,12 @@ func ComputeDeltaBreakdown(r1, r2, setsWon, setsLost int) RGXBreakdown {
 	performanceDelta := b * 50.0 * (p - performanceE1)
 
 	return RGXBreakdown{
-		B:                  b,
-		P:                  p,
-		E1:                 e1,
-		Delta:              int(math.Round(delta)),
-		PerformanceE1:      performanceE1,
-		PerformanceDelta:   int(math.Round(performanceDelta)),
+		B:                b,
+		P:                p,
+		E1:               e1,
+		Delta:            int(math.Round(delta)),
+		PerformanceE1:    performanceE1,
+		PerformanceDelta: int(math.Round(performanceDelta)),
 	}
 }
 

@@ -36,3 +36,9 @@ func (s *FeedbackStore) Create(rating int, text string, createdAt time.Time) (*F
 	}
 	return &Feedback{ID: id, Rating: rating, Text: text, CreatedAt: createdAt}, nil
 }
+
+// Summary returns the number of feedback rows and their average rating (0 if none).
+func (s *FeedbackStore) Summary() (count int, avgRating float64, err error) {
+	err = s.db.QueryRow(`SELECT COUNT(*), COALESCE(AVG(rating), 0) FROM feedback`).Scan(&count, &avgRating)
+	return count, avgRating, err
+}

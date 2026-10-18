@@ -150,7 +150,12 @@ internal/cache/     # in-memory TTL cache
 internal/db/        # SQLite access layer (PlayerStore, JobStore, JobStatsStore, TournamentStore, LeagueStore, PermissionStore)
 internal/cron/      # weekly scrape job + league roster index + daily RgxJob cleanup (Scheduler)
 internal/config/    # env-based config
+internal/metrics/   # Prometheus metrics; names are a contract with the vps-infra Grafana dashboards
 ```
+
+Logging is `log/slog` with a JSON handler on stdout, set as default in `cmd/server`. Use
+structured attrs rather than `log.Printf`, and never log player names. Metrics are served
+only on the separate `METRICS_PORT` listener (`/metrics`), never on the public router.
 
 ## Frontend component layout (actual)
 
@@ -200,6 +205,7 @@ Every merge to `main` is a release. The `release` job in `.github/workflows/dock
 | Variable                | Default             | Notes                                                                                                                                                                                          |
 | ----------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PORT`                  | `8080`              |                                                                                                                                                                                                |
+| `METRICS_PORT`          | `9090`              | Prometheus `/metrics` on its own listener, separate from `PORT` — see `internal/metrics`                                                                                                       |
 | `DB_PATH`               | `./data/players.db` |                                                                                                                                                                                                |
 | `IMAGE_CACHE_DIR`       | `./cache/images`    |                                                                                                                                                                                                |
 | `TZ`                    | —                   | Must be set to `Europe/Berlin`                                                                                                                                                                 |

@@ -47,6 +47,16 @@ TZ=Europe/Berlin go run ./cmd/server
 
 The server listens on `:8080` by default. Override with `PORT`.
 
+### Metrics and logs
+
+Prometheus metrics (all prefixed `rgblitz_`, plus the default Go/process collectors) are served at `/metrics` on a **separate** listener, `:9090` by default (`METRICS_PORT`) — never on the public API port. They're defined in `internal/metrics`; the Grafana dashboards in vps-infra depend on the exact names. Counters/histograms are updated in-process; the `rgblitz_players_indexed`, `rgblitz_jobs_all_time`, `rgblitz_tournaments_known`, `rgblitz_feedback_*` and `rgblitz_scrape_permitted` gauges are read from SQLite at scrape time.
+
+```sh
+curl -s localhost:9090/metrics | grep '^rgblitz_'
+```
+
+Logs are JSON lines on stdout (`log/slog`): one `"http request"` line per request (except `/health`), one `"playerzone request"` line per outbound request, and exactly one `"rgx job finished"` line per job. Player names are never logged.
+
 ### Dev mode (bypass weekend/time guard)
 
 In dev mode every call to `/api/players/:id/today` returns a synthetic tournament result computed from real players in the DB — regardless of the current day or time. Useful when building the frontend on a weekday.
@@ -280,6 +290,7 @@ This fetches the live `robots.txt`, evaluates it for `RGBlitzBot`, and updates t
 | Variable        | Default              | Description |
 |-----------------|----------------------|-------------|
 | `PORT`          | `8080`               | HTTP listen port |
+| `METRICS_PORT`  | `9090`               | Prometheus `/metrics` listen port (separate from `PORT`) |
 | `DB_PATH`       | `./data/players.db`  | SQLite database file |
 | `IMAGE_CACHE_DIR` | `./cache/images`   | Disk cache for proxied CDN images (7-day TTL) |
 | `TZ`            | —                    | **Must** be `Europe/Berlin`; affects all time-window logic |
@@ -345,6 +356,7 @@ internal/
   jobqueue/ — single-worker queue draining RgxJob rows through the shared rate limiter
   cache/    — thin in-memory TTL cache wrapper (go-cache)
   config/   — env-based config struct
+  metrics/  — Prometheus metrics + SQLite-backed collector, served on METRICS_PORT
   cron/     — weekly Saturday 03:00 CET player-index scrape + daily RgxJob cleanup
   db/       — SQLite schema migration + player/job/tournament/permission CRUD
   scraper/  — HTML parsers for each playerzone page type (including a tournament's own

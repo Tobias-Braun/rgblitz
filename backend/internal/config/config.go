@@ -6,7 +6,10 @@ import (
 )
 
 type Config struct {
-	Port          string
+	Port string
+	// MetricsPort serves Prometheus /metrics on its own listener, so it's never
+	// reachable through the public ingress.
+	MetricsPort   string
 	DBPath        string
 	ImageCacheDir string
 	// Forces tournament-window logic to always return fake data regardless of day/time.
@@ -27,6 +30,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		Port:                getEnv("PORT", "8080"),
+		MetricsPort:         getEnv("METRICS_PORT", "9090"),
 		DBPath:              getEnv("DB_PATH", "./data/players.db"),
 		ImageCacheDir:       getEnv("IMAGE_CACHE_DIR", "./cache/images"),
 		DevMode:             getBoolEnv("DEV_MODE", false),

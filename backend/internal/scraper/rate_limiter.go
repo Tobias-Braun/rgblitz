@@ -1,6 +1,10 @@
 package scraper
 
-import "time"
+import (
+	"time"
+
+	"github.com/tobiasmarkusbraun/rgblitz/internal/metrics"
+)
 
 // RateLimiter enforces a global minimum delay between outbound playerzone requests.
 // All goroutines share one instance; calling Wait() blocks until the next slot is available.
@@ -13,5 +17,7 @@ func NewRateLimiter(interval time.Duration) *RateLimiter {
 }
 
 func (r *RateLimiter) Wait() {
+	start := time.Now()
 	<-r.ticker.C
+	metrics.RateLimitWait.Observe(time.Since(start).Seconds())
 }
