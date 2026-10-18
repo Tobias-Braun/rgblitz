@@ -92,6 +92,7 @@ internal/
     tournament.go # parses a team schedule page into per-game RGX deltas
     tournament_detail.go # parses a tournament's own detail page for its name/date/GRT status
     orchestrate.go # ScrapePlayerToday — the full home→tournament→division→schedule hop, run off the request path
+    fetchers.go   # the page fetchers that hop uses, each behind the in-memory cache (counted in rgblitz_scraper_cache_total)
     league*.go    # Deutsche Roundnet Liga: matchday/Partie parsers, ScrapePlayerLeagueToday, the roster index scrape
   jobqueue/       # single-worker queue draining RgxJob rows through the shared rate limiter
   cache/          # in-memory TTL cache for tournament results + images
