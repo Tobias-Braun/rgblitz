@@ -46,44 +46,66 @@ func main() {
 	fetcher := scraper.NewHTTPFetcher(rateLimiter)
 
 	scheduler := cron.NewScheduler(players, jobs, league, fetcher, permissions, cfg.RespectPermission)
+	ensurePlayerIndex(scheduler, players)
+	scheduler.Start()
+	defer scheduler.Stop()
+	buildLeagueIndexInBackground(scheduler, league)
 
-	// Guard against serving an empty/stale index on first boot or after a lost
-	// volume — the weekly cron alone wouldn't catch up until the next Saturday.
+	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: memCache, ProxyURL: api.ProxyURL, Tournaments: tournaments, League: league}
+	queue := jobqueue.New(jobs, jobStats, players, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
+	resumeStuckJobs(jobs, queue)
+	queue.Start()
+
+	handler := api.NewHandler(cfg, players, memCache, fetcher, permissions, jobs, jobStats, queue, feedback, notifier)
+	router := api.NewRouter(handler)
+
+	go serveMetrics(cfg.MetricsPort, &metrics.DBCollector{Players: players, Stats: jobStats, Tournaments: tournaments,
+		Feedback: feedback, Permissions: permissions, RespectPermission: cfg.RespectPermission})
+
+	addr := ":" + cfg.Port
+	slog.Info("rgblitz server starting", "addr", addr, "dev_mode", cfg.DevMode)
+	fatal("server", http.ListenAndServe(addr, router))
+}
+
+// ensurePlayerIndex guards against serving an empty/stale index on first boot or after a
+// lost volume — the weekly cron alone wouldn't catch up until the next Saturday.
+func ensurePlayerIndex(scheduler *cron.Scheduler, players *db.PlayerStore) {
 	count, err := players.Count()
 	if err != nil {
 		fatal("count players", err)
 	}
-	if count < 1000 {
-		slog.Info("player index too small, running initial scrape before serving requests", "players", count)
-		if err := scheduler.ScrapeNow(); err != nil {
-			slog.Error("initial scrape failed", "error", err)
-		}
+	if count >= 1000 {
+		return
 	}
+	slog.Info("player index too small, running initial scrape before serving requests", "players", count)
+	if err := scheduler.ScrapeNow(); err != nil {
+		slog.Error("initial scrape failed", "error", err)
+	}
+}
 
-	scheduler.Start()
-	defer scheduler.Stop()
-
-	// The league roster index takes minutes (one request per team), so unlike the player
-	// index it is built in the background; league players fall back to the tournament path
-	// until it is done. It parses scraped pages, hence the recover.
-	if n, err := league.Count(); err == nil && n == 0 {
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					slog.Error("initial league roster index panicked", "panic", r)
-				}
-			}()
-			if err := scheduler.ScrapeLeagueNow(); err != nil {
-				slog.Error("initial league roster index failed", "error", err)
+// buildLeagueIndexInBackground fills an empty league roster index. It takes minutes (one
+// request per team), so unlike the player index it is built in the background; league
+// players fall back to the tournament path until it is done. It parses scraped pages,
+// hence the recover.
+func buildLeagueIndexInBackground(scheduler *cron.Scheduler, league *db.LeagueStore) {
+	if n, err := league.Count(); err != nil || n > 0 {
+		return
+	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("initial league roster index panicked", "panic", r)
 			}
 		}()
-	}
+		if err := scheduler.ScrapeLeagueNow(); err != nil {
+			slog.Error("initial league roster index failed", "error", err)
+		}
+	}()
+}
 
-	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: memCache, ProxyURL: api.ProxyURL, Tournaments: tournaments, League: league}
-	queue := jobqueue.New(jobs, jobStats, players, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
-
-	// Recover any job left "running" by a crash mid-scrape, then start the
-	// single background worker that drains the queue in FIFO order.
+// resumeStuckJobs re-enqueues any job left "running" by a crash mid-scrape, so the
+// single background worker picks it up again in FIFO order.
+func resumeStuckJobs(jobs *db.JobStore, queue *jobqueue.Queue) {
 	stuck, err := jobs.ResetStuckRunning()
 	if err != nil {
 		slog.Error("reset stuck jobs", "error", err)
@@ -91,22 +113,14 @@ func main() {
 	for _, id := range stuck {
 		queue.Enqueue(id)
 	}
-	queue.Start()
+}
 
-	handler := api.NewHandler(cfg, players, memCache, fetcher, permissions, jobs, jobStats, queue, feedback, notifier)
-	router := api.NewRouter(handler)
-
-	prometheus.MustRegister(&metrics.DBCollector{Players: players, Stats: jobStats, Tournaments: tournaments,
-		Feedback: feedback, Permissions: permissions, RespectPermission: cfg.RespectPermission})
-	go func() {
-		addr := ":" + cfg.MetricsPort
-		slog.Info("metrics server starting", "addr", addr)
-		fatal("metrics server", http.ListenAndServe(addr, metrics.Handler()))
-	}()
-
-	addr := ":" + cfg.Port
-	slog.Info("rgblitz server starting", "addr", addr, "dev_mode", cfg.DevMode)
-	fatal("server", http.ListenAndServe(addr, router))
+// serveMetrics exposes /metrics on its own port, so it never reaches the public router.
+func serveMetrics(port string, collector prometheus.Collector) {
+	prometheus.MustRegister(collector)
+	addr := ":" + port
+	slog.Info("metrics server starting", "addr", addr)
+	fatal("metrics server", http.ListenAndServe(addr, metrics.Handler()))
 }
 
 func fatal(msg string, err error) {
