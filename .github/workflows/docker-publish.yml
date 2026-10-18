@@ -27,6 +27,8 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          # Deploy keys bypass the prot-main ruleset; GITHUB_TOKEN can't on a personal-account repo.
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
       - name: Collect changes since last release
         id: changes
@@ -69,7 +71,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "chore: release v$version"
           git tag -a "v$version" -m "v$version"
-          # Pushed with GITHUB_TOKEN, which never triggers another workflow run.
+          # The deploy-key push triggers one more run, which finds nothing pending and builds nothing.
           git push origin HEAD:main "v$version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
