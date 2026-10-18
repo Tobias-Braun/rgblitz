@@ -209,7 +209,9 @@ plays today, goes through the tournament pipeline unchanged.
 
 ### Tournament Data (daily, on-demand)
 
-Tournaments run on a **single calendar day**, typically **08:00–20:00 CET**.
+Tournaments run on a **single calendar day**, typically **08:00–20:00 CET**. A day's results
+stay reachable until **02:00 CET the next morning**: requests between 00:00 and 02:00 resolve to
+the previous day (`scraper.CompetitionDay`).
 
 **Cache key**: `tournament:{player_id}:{date}` where `date` is `YYYY-MM-DD` in CET.
 
@@ -219,10 +221,9 @@ Tournaments run on a **single calendar day**, typically **08:00–20:00 CET**.
 
 | Condition | Cache TTL |
 |-----------|-----------|
-| Weekday (Mon–Fri) | Return `{status: "no_tournament"}` immediately — no playerzone request, no cache entry needed |
-| Weekend, before 08:00 CET | Return `{status: "no_tournament"}` immediately without hitting playerzone |
-| Weekend, 08:00–20:00 CET (tournament window) | Cache for **60 seconds** — re-scrape on next request after expiry |
-| Weekend, after 20:00 CET | Tournament considered finished; cache for **24 hours**; no further scrapes today |
+| Weekday (Mon–Fri), except Monday 00:00–02:00 | Return `{status: "no_tournament"}` immediately — no playerzone request, no cache entry needed |
+| Weekend, 02:00–08:00 CET | Return `{status: "no_tournament"}` immediately without hitting playerzone |
+| Weekend, 08:00 CET until 02:00 the next morning (tournament window) | Cache for **60 seconds** — re-scrape on next request after expiry |
 | Weekend, no tournament found for player today | Cache negative result for **15 minutes** to avoid hammering playerzone |
 
 **"Tournament active today" check**: Before scraping match data, check whether there is a tournament scheduled for today on playerzone. This avoids unnecessary scraping on non-tournament days.

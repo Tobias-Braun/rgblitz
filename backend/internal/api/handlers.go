@@ -231,20 +231,22 @@ func (h *Handler) TodayResult(w http.ResponseWriter, r *http.Request) {
 
 	noTournament := JobResponse{Status: "no_tournament", Result: &TodayResponse{Status: "no_tournament", Player: pInfo}}
 
-	// Weekday guard — tournaments only happen on weekends. Neither this nor the
+	// Weekday guard — tournaments only happen on weekends, and a weekend day's
+	// results stay reachable until 02:00 the next morning. Neither this nor the
 	// hour guard below ever touches the job queue.
-	if wd := now.Weekday(); wd != time.Saturday && wd != time.Sunday {
+	day := scraper.CompetitionDay(now)
+	if wd := day.Weekday(); wd != time.Saturday && wd != time.Sunday {
 		metrics.TodayRequests.WithLabelValues("weekday").Inc()
 		jsonOK(w, noTournament)
 		return
 	}
-	if now.Hour() < 8 {
+	if now.Hour() < 8 && day.Day() == now.Day() {
 		metrics.TodayRequests.WithLabelValues("early").Inc()
 		jsonOK(w, noTournament)
 		return
 	}
 
-	dateStr := now.Format("2006-01-02")
+	dateStr := day.Format("2006-01-02")
 	job, err := h.jobs.LatestForPlayerDate(playerID, dateStr)
 	if err != nil {
 		slog.Error("load latest job", "player_id", playerID, "error", err)

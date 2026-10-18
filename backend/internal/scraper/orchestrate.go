@@ -47,6 +47,16 @@ type ScrapeDeps struct {
 	League      *db.LeagueStore
 }
 
+// competitionDayRollover is how long after midnight the previous day's competition still counts
+// as today, so results stay reachable through a long tournament or matchday evening.
+const competitionDayRollover = 2 * time.Hour
+
+// CompetitionDay returns a time on the calendar day whose competition is "today" at t: until
+// 02:00 that is the previous day. Only its date (in t's location) is meaningful.
+func CompetitionDay(t time.Time) time.Time {
+	return t.Add(-competitionDayRollover)
+}
+
 // ScrapePlayerToday runs the full scrape pipeline (player profile → today's
 // team → schedule → division sidebar → GRT classification → division teams →
 // RGX deltas) for one player, always attempting the scrape regardless of the
@@ -67,7 +77,8 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		ClubLogoURL: deps.ProxyURL(player.ClubLogoURL),
 		RGX:         player.RGX,
 	}
-	dateStr := now.Format("2006-01-02")
+	competitionDay := CompetitionDay(now)
+	dateStr := competitionDay.Format("2006-01-02")
 
 	numericID, err := NumericPlayerID(player.ID)
 	if err != nil {
@@ -79,7 +90,7 @@ func ScrapePlayerToday(deps ScrapeDeps, player *db.Player, now time.Time) (Today
 		return TodayResult{}, 0, fmt.Errorf("fetch player profile: %w", err)
 	}
 
-	today := now.Format("02.01.06")
+	today := competitionDay.Format("02.01.06")
 	var teamID int
 	found := false
 	for _, e := range entries {

@@ -149,6 +149,28 @@ func TestScrapePlayerLeagueToday_SeveralRosters(t *testing.T) {
 	}
 }
 
+// Until 02:00 the previous day's matchday is still today's.
+func TestScrapePlayerLeagueToday_AfterMidnight(t *testing.T) {
+	fetcher := &pageFetcher{pages: map[string]string{
+		"/tournaments/schedule/team/39500": leagueSchedulePage,
+		"/tournaments/schedule/team/39823": opponentSchedulePage,
+		"/tournaments/schedule/team/40001": opponentSchedulePage,
+		"/tournaments/543-x/schedule/":     matchdayPage(525, "21.02.2026"),
+		"/ajax/get-subgames/324345":        playedSubgames,
+		"/ajax/get-subgames/324333":        `{"html": "<rg-game-card variant=\"subgame\"><div class=\"teams\"><div class=\"team\"><span class=\"name\">A/B</span></div><div class=\"team\"><span class=\"name\">Bottler/Schirop</span></div></div></rg-game-card>"}`,
+	}}
+	deps := newLeagueDeps(t, fetcher, db.LeagueMembership{PlayerID: "2329", TeamID: 39500})
+	player := &db.Player{ID: "JON2329", Name: "Jonas Bottler"}
+
+	result, _, handled, err := scraper.ScrapePlayerLeagueToday(deps, player, time.Date(2026, 2, 22, 1, 30, 0, 0, time.UTC))
+	if err != nil || !handled || result.Date != "2026-02-21" || len(result.Games) != 1 {
+		t.Errorf("01:30: handled=%v err=%v date=%q games=%d; want the 21.02. matchday", handled, err, result.Date, len(result.Games))
+	}
+	if _, _, handled, _ := scraper.ScrapePlayerLeagueToday(deps, player, time.Date(2026, 2, 22, 2, 30, 0, 0, time.UTC)); handled {
+		t.Error("02:30: still handled, want the 21.02. matchday over")
+	}
+}
+
 func TestScrapePlayerLeagueToday_NotHandled(t *testing.T) {
 	fetcher := &pageFetcher{pages: map[string]string{
 		"/tournaments/schedule/team/39500": leagueSchedulePage,

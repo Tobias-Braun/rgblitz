@@ -50,7 +50,7 @@ func ScrapePlayerLeagueToday(deps ScrapeDeps, player *db.Player, now time.Time) 
 		ClubLogoURL: deps.ProxyURL(player.ClubLogoURL),
 		RGX:         player.RGX,
 	}
-	date := now.Format("2006-01-02")
+	date := CompetitionDay(now).Format("2006-01-02")
 	day := TodayResult{Status: "ok", Competition: CompetitionLeague, Player: pInfo, Date: date}
 
 	for _, team := range teams {
