@@ -174,8 +174,10 @@ pre-matchday RGX shown on the rosters is the fixed baseline for the day, as for 
 Only the regular season is supported; the final phases (Final Six, Elite Eight, Champions Cup)
 carry no matchday group and are skipped.
 
-A roster index, `league_players`, maps playerzone's numeric player ID to the player's team
-(tournament registration ID) in the current season:
+A roster index, `league_rosters`, maps playerzone's numeric player ID to every team (tournament
+registration ID) whose roster lists the player in the current season — one row per (player,
+team). A player can be on several rosters, including teams of clubs other than their own, so the
+club a player is registered at plays no role:
 
 | Field | Meaning |
 |-------|---------|
@@ -185,11 +187,12 @@ A roster index, `league_players`, maps playerzone's numeric player ID to the pla
 
 **Write rules**: rebuilt Saturday and Sunday 03:00 CET right after the player index, and once
 at startup (in the background) while empty. Rows of earlier seasons are dropped; a team whose
-roster failed to load keeps its earlier rows.
+roster failed to load keeps its earlier rows; a team whose roster loaded has its rows replaced.
 
-**Read rules**: every job checks it first. A player on a roster whose team plays today gets
-league results (`competition: "league"`), one game per Partie the player played. A player not on
-any roster, or whose team doesn't play today, goes through the tournament pipeline unchanged.
+**Read rules**: every job checks it first, for every team the player is on. A player with at
+least one team playing today gets league results (`competition: "league"`), one game per Partie
+the player played for any of those teams. A player not on any roster, or none of whose teams
+plays today, goes through the tournament pipeline unchanged.
 
 ---
 
