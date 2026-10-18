@@ -1,5 +1,16 @@
 [
   {
+    "version": "0.9.0",
+    "date": "2026-10-18",
+    "internal": false,
+    "changes": [
+      "Spieler:innen der Deutschen Roundnet Liga sehen jetzt an Spieltagen ihre RGX-Änderung für jede gespielte Partie.",
+      "Wer im Kader mehrerer Liga-Teams steht, bekommt jetzt die Ergebnisse des Teams, für das tatsächlich gespielt wurde.",
+      "Die Ergebnisse eines Wettkampftags bleiben jetzt bis 02:00 Uhr am nächsten Morgen abrufbar und verschwinden nicht mehr um Mitternacht.",
+      "Unter der Haube wurden Stabilität und Überwachung der Seite verbessert."
+    ]
+  },
+  {
     "version": "0.8.1",
     "date": "2026-10-15",
     "internal": true,
