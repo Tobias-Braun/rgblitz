@@ -121,6 +121,34 @@ func TestScrapePlayerLeagueToday(t *testing.T) {
 	}
 }
 
+// A player on two rosters is found through the team that plays today, even when the other
+// roster is checked first.
+func TestScrapePlayerLeagueToday_SeveralRosters(t *testing.T) {
+	otherTeamPage := strings.NewReplacer("39823", "30000", "543-x", "543-y", "md_group=525", "md_group=526").Replace(opponentSchedulePage)
+	fetcher := &pageFetcher{pages: map[string]string{
+		"/tournaments/schedule/team/30000": otherTeamPage,
+		"/tournaments/543-y/schedule/":     matchdayPage(526, "22.02.2026"),
+		"/tournaments/schedule/team/39500": leagueSchedulePage,
+		"/tournaments/schedule/team/39823": opponentSchedulePage,
+		"/tournaments/schedule/team/40001": opponentSchedulePage,
+		"/tournaments/543-x/schedule/":     matchdayPage(525, "21.02.2026"),
+		"/ajax/get-subgames/324345":        playedSubgames,
+		"/ajax/get-subgames/324333":        `{"html": "<rg-game-card variant=\"subgame\"><div class=\"teams\"><div class=\"team\"><span class=\"name\">A/B</span></div><div class=\"team\"><span class=\"name\">Bottler/Schirop</span></div></div></rg-game-card>"}`,
+	}}
+	deps := newLeagueDeps(t, fetcher,
+		db.LeagueMembership{PlayerID: "2329", TeamID: 39500},
+		db.LeagueMembership{PlayerID: "2329", TeamID: 30000},
+	)
+
+	result, tournamentID, handled, err := scraper.ScrapePlayerLeagueToday(deps, &db.Player{ID: "JON2329", Name: "Jonas Bottler"}, time.Date(2026, 2, 21, 15, 0, 0, 0, time.UTC))
+	if err != nil || !handled || tournamentID != 543 {
+		t.Fatalf("handled=%v tournament=%d err=%v", handled, tournamentID, err)
+	}
+	if len(result.Games) != 1 || result.Games[0].OurTeamName != "Schirop/Bottler" {
+		t.Errorf("games = %+v, want the Open 1 played for team 39500", result.Games)
+	}
+}
+
 func TestScrapePlayerLeagueToday_NotHandled(t *testing.T) {
 	fetcher := &pageFetcher{pages: map[string]string{
 		"/tournaments/schedule/team/39500": leagueSchedulePage,

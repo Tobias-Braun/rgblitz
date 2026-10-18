@@ -87,12 +87,17 @@ func migrate(db *sql.DB) error {
 			scraped_at DATETIME NOT NULL
 		);
 
-		-- league_players is the roster index of the current Deutsche Roundnet Liga season,
-		-- rebuilt weekly by cron (see internal/scraper.ScrapeLeagueRosters).
-		CREATE TABLE IF NOT EXISTS league_players (
-			player_id     TEXT PRIMARY KEY,
+		-- league_rosters is the roster index of the current Deutsche Roundnet Liga season,
+		-- rebuilt weekly by cron (see internal/scraper.ScrapeLeagueRosters). A player can be on
+		-- several teams' rosters, so it holds one row per (player, team). It replaces
+		-- league_players, which kept one team per player; the server rebuilds the index at
+		-- startup while it's empty.
+		DROP TABLE IF EXISTS league_players;
+		CREATE TABLE IF NOT EXISTS league_rosters (
+			player_id     TEXT NOT NULL,
 			team_id       INTEGER NOT NULL,
-			tournament_id INTEGER NOT NULL
+			tournament_id INTEGER NOT NULL,
+			PRIMARY KEY (player_id, team_id)
 		);
 
 		CREATE TABLE IF NOT EXISTS feedback (

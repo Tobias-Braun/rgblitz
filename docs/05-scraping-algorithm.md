@@ -299,21 +299,23 @@ Runs before the tournament pipeline for every job (`internal/jobqueue`). See
 
 ```
 FUNCTION ScrapePlayerLeagueToday(player, now):
-  membership = league_players[NumericPlayerID(player.id)]
+  teams = league_rosters[NumericPlayerID(player.id)] # every roster the player is on
   IF none: RETURN not handled                      # no playerzone request at all
 
-  ours = schedule page of membership.team_id       # roster with RGX + Begegnungen
-  todays = Begegnungen whose matchday group's date == today
-           (matchday group page per md_group, cached)
-  IF none: RETURN not handled                      # tournament pipeline runs instead
+  FOR each team in teams:
+    ours = schedule page of team.team_id           # roster with RGX + Begegnungen
+    todays = Begegnungen whose matchday group's date == today
+             (matchday group page per md_group, cached)
+    IF none: CONTINUE
 
-  FOR each Begegnung in todays (in playing order):
-    partien  = GET /ajax/get-subgames/{game_id}
-    opponent = schedule page of the opponent team (roster only)
-    FOR each played Partie whose own-side names resolve to this player:
-      r1 = our pair's RGX sum, r2 = their pair's RGX sum
-           (names resolved uniquely against the rosters; unresolved or 0 → proxy)
-      game = RGX formula(r1, r2, sets)
+    FOR each Begegnung in todays (in playing order):
+      partien  = GET /ajax/get-subgames/{game_id}
+      opponent = schedule page of the opponent team (roster only)
+      FOR each played Partie whose own-side names resolve to this player:
+        r1 = our pair's RGX sum, r2 = their pair's RGX sum
+             (names resolved uniquely against the rosters; unresolved or 0 → proxy)
+        game = RGX formula(r1, r2, sets)
+  IF no team plays today: RETURN not handled       # tournament pipeline runs instead
   RETURN ok, competition = "league", games
 ```
 
@@ -375,7 +377,7 @@ Result:
 | `profile:{numeric_id}` | 60s | In-memory | Parsed tournament entries from a player's profile page |
 | `division_teams:{teams_path}` | 5 min | In-memory | Parsed team list for a division |
 | `tournaments` DB table | Permanent, never re-scraped | SQLite | Tournament id → name, GRT flag, first-day date |
-| `league_players` DB table | Rebuilt Sat/Sun 03:00 | SQLite | League roster index: numeric player id → team, season |
+| `league_rosters` DB table | Rebuilt Sat/Sun 03:00 | SQLite | League roster index: numeric player id → every team whose roster lists them, season |
 | `league_schedule:{team_id}` | 6h | In-memory | A league team's roster with RGX + its Begegnungen |
 | `league_md_group:{md_group}` | 6h | In-memory | A matchday group's date, city, name |
 | `league_subgames:{game_id}` | 60s | In-memory | A Begegnung's Partien — the only league data that changes during a matchday |

@@ -21,11 +21,13 @@ type leagueSchedule struct {
 	Fixtures []LeagueFixture
 }
 
-// ScrapePlayerLeagueToday computes a player's RGX deltas for today's league matchday: their
-// team (from the roster index) → its Begegnungen today (by matchday group date) → the Partien
-// the player played in each → one RGX game per Partie, priced by the two pairs' RGX sums.
+// ScrapePlayerLeagueToday computes a player's RGX deltas for today's league matchday: every team
+// whose roster the player is on (from the roster index) → that team's Begegnungen today (by
+// matchday group date) → the Partien the player played in each → one RGX game per Partie,
+// priced by the two pairs' RGX sums. A player can be on several rosters, so each one is checked:
+// the Partien alone tell which team they played for.
 //
-// handled is false when the player isn't on a league roster or their team doesn't play today;
+// handled is false when the player isn't on a league roster or none of their teams plays today;
 // the caller then runs the tournament pipeline (ScrapePlayerToday) instead.
 func ScrapePlayerLeagueToday(deps ScrapeDeps, player *db.Player, now time.Time) (result TodayResult, tournamentID int, handled bool, err error) {
 	if deps.League == nil {
@@ -35,20 +37,8 @@ func ScrapePlayerLeagueToday(deps ScrapeDeps, player *db.Player, now time.Time) 
 	if err != nil {
 		return TodayResult{}, 0, false, nil
 	}
-	membership, err := deps.League.TeamForPlayer(numericID)
-	if err != nil || membership == nil {
-		return TodayResult{}, 0, false, err
-	}
-
-	ours, err := fetchLeagueSchedule(deps, membership.TeamID)
-	if err != nil {
-		return TodayResult{}, 0, false, fmt.Errorf("fetch league team schedule: %w", err)
-	}
-	if len(ours.Fixtures) == 0 {
-		return TodayResult{}, 0, false, fmt.Errorf("league team %d lists no matchday fixtures — possible DOM change", membership.TeamID)
-	}
-	todays, err := fixturesOn(deps, ours.Fixtures, now.Format("2006-01-02"))
-	if err != nil || len(todays) == 0 {
+	teams, err := deps.League.TeamsForPlayer(numericID)
+	if err != nil || len(teams) == 0 {
 		return TodayResult{}, 0, false, err
 	}
 
@@ -60,24 +50,46 @@ func ScrapePlayerLeagueToday(deps ScrapeDeps, player *db.Player, now time.Time) 
 		ClubLogoURL: deps.ProxyURL(player.ClubLogoURL),
 		RGX:         player.RGX,
 	}
-	if self, ok := rosterPlayerByID(ours.Players, numericID); ok && self.RGX > 0 {
-		pInfo.RGX = self.RGX
-	}
+	date := now.Format("2006-01-02")
+	day := TodayResult{Status: "ok", Competition: CompetitionLeague, Player: pInfo, Date: date}
 
-	day := TodayResult{Status: "ok", Competition: CompetitionLeague, Player: pInfo, Date: now.Format("2006-01-02")}
-	for _, f := range todays {
-		games, err := playerPartien(deps, ours, f, numericID)
+	for _, team := range teams {
+		ours, err := fetchLeagueSchedule(deps, team.TeamID)
 		if err != nil {
-			return TodayResult{}, 0, true, err
+			return TodayResult{}, 0, false, fmt.Errorf("fetch league team schedule: %w", err)
 		}
-		for _, g := range games {
-			day.TotalDelta += g.RGXDelta
-			day.TotalPerformanceDelta += g.PerformanceDelta
-			day.HasProxy = day.HasProxy || g.HasProxy
+		if len(ours.Fixtures) == 0 {
+			return TodayResult{}, 0, false, fmt.Errorf("league team %d lists no matchday fixtures — possible DOM change", team.TeamID)
 		}
-		day.Games = append(day.Games, games...)
+		todays, err := fixturesOn(deps, ours.Fixtures, date)
+		if err != nil {
+			return TodayResult{}, 0, false, err
+		}
+		if len(todays) == 0 {
+			continue
+		}
+		handled, tournamentID = true, team.TournamentID
+
+		if self, ok := rosterPlayerByID(ours.Players, numericID); ok && self.RGX > 0 {
+			pInfo.RGX = self.RGX
+		}
+		for _, f := range todays {
+			games, err := playerPartien(deps, ours, f, numericID)
+			if err != nil {
+				return TodayResult{}, 0, true, err
+			}
+			for _, g := range games {
+				day.TotalDelta += g.RGXDelta
+				day.TotalPerformanceDelta += g.PerformanceDelta
+				day.HasProxy = day.HasProxy || g.HasProxy
+			}
+			day.Games = append(day.Games, games...)
+		}
 	}
-	return day, membership.TournamentID, true, nil
+	if !handled {
+		return TodayResult{}, 0, false, nil
+	}
+	return day, tournamentID, true, nil
 }
 
 // fixturesOn keeps the Begegnungen whose matchday group plays on date (YYYY-MM-DD), in playing
