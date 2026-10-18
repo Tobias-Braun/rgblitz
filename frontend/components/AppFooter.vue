@@ -5,6 +5,7 @@
     <NuxtLink to="/faq" class="footer-link">FAQ</NuxtLink>
     <NuxtLink to="/datenschutz" class="footer-link">Datenschutz</NuxtLink>
     <NuxtLink to="/impressum" class="footer-link">Impressum</NuxtLink>
+    <NuxtLink to="/changelog" class="footer-link version">v{{ appVersion }}</NuxtLink>
   </footer>
 </template>
 
@@ -24,6 +25,11 @@
   font: 400 14px/1 var(--font-body);
   color: var(--text-dim);
   text-decoration: none;
+}
+
+.version {
+  font-family: var(--font-mono);
+  font-size: 13px;
 }
 
 .footer-link:hover {
