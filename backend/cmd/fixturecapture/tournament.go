@@ -2,11 +2,9 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -62,11 +60,7 @@ func captureTournaments(run runContext, opts tournamentOptions) int {
 		snapshot := captureOneTournament(run, opts, entry, snapDir)
 		snapshot.Fetched = run.rec.records()
 
-		if err := run.rec.writeManifest(snapDir, sharedPaths); err != nil {
-			fmt.Fprintf(os.Stderr, "  warning: write manifest: %v\n", err)
-		}
-		if err := writeTournamentCapture(snapDir, snapshot); err != nil {
-			fmt.Fprintf(os.Stderr, "  write capture: %v\n", err)
+		if !saveSnapshot(run, snapDir, sharedPaths, snapshot, tournamentReport(snapshot)) {
 			failures++
 			continue
 		}
@@ -486,17 +480,6 @@ func compareSides(division string, gameID int, a, b gameSide) *mirrorMismatch {
 }
 
 // --- output ---
-
-func writeTournamentCapture(dir string, c tournamentCapture) error {
-	raw, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "capture.json"), raw, 0o644); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, "report.txt"), []byte(tournamentReport(c)), 0o644)
-}
 
 func tournamentReport(c tournamentCapture) string {
 	var b strings.Builder

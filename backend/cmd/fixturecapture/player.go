@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -90,11 +89,7 @@ func capturePlayers(run runContext, queries []string) int {
 		snapshot.Fetched = run.rec.records()
 		snapshot.Parsed = reparse(snapDir)
 
-		if err := run.rec.writeManifest(snapDir, sharedPaths); err != nil {
-			fmt.Fprintf(os.Stderr, "  warning: write manifest: %v\n", err)
-		}
-		if err := writePlayerCapture(snapDir, snapshot); err != nil {
-			fmt.Fprintf(os.Stderr, "  write capture: %v\n", err)
+		if !saveSnapshot(run, snapDir, sharedPaths, snapshot, playerReport(snapshot)) {
 			failures++
 			continue
 		}
@@ -221,17 +216,6 @@ func withFile(dir, name string, errs map[string]string, parse func(io.Reader) er
 	}
 }
 
-func writePlayerCapture(dir string, c playerCapture) error {
-	raw, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(dir, "capture.json"), raw, 0o644); err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dir, "report.txt"), []byte(playerReport(c)), 0o644)
-}
-
 // playerReport renders a player capture as the human-readable debugging view: what was
 // fetched, what each parser made of it, and every intermediate of the RGX formula per game.
 func playerReport(c playerCapture) string {
@@ -248,16 +232,8 @@ func playerReport(c playerCapture) string {
 		fmt.Fprintf(&b, "PIPELINE ERROR: %s\n", c.PipelineError)
 	}
 
-	b.WriteString("\n--- fetched pages ---\n")
-	writeFetchedPages(&b, c.Fetched)
-
 	p := c.Parsed
-	if len(p.Errors) > 0 {
-		b.WriteString("\n--- parse errors ---\n")
-		for file, msg := range p.Errors {
-			fmt.Fprintf(&b, "  %s: %s\n", file, msg)
-		}
-	}
+	writeFetchedAndParseErrors(&b, c.Fetched, p.Errors)
 
 	if len(p.ProfileEntries) > 0 {
 		b.WriteString("\n--- profile tournament entries ---\n")

@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -10,6 +13,40 @@ import (
 
 // The rendering helpers below are shared by both capture modes so a tournament report and a
 // player report show the same numbers in the same layout.
+
+// saveSnapshot writes a snapshot's manifest, capture.json and report.txt, reporting false when
+// the capture itself couldn't be saved. A missing manifest only costs the offline replay.
+func saveSnapshot(run runContext, dir string, sharedPaths map[string]string, capture any, report string) bool {
+	if err := run.rec.writeManifest(dir, sharedPaths); err != nil {
+		fmt.Fprintf(os.Stderr, "  warning: write manifest: %v\n", err)
+	}
+	raw, err := json.MarshalIndent(capture, "", "  ")
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, "capture.json"), raw, 0o644)
+	}
+	if err == nil {
+		err = os.WriteFile(filepath.Join(dir, "report.txt"), []byte(report), 0o644)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  write capture: %v\n", err)
+		return false
+	}
+	return true
+}
+
+// writeFetchedAndParseErrors opens every report: what was fetched, and which pages the parsers
+// couldn't read.
+func writeFetchedAndParseErrors(b *strings.Builder, records []fetchRecord, parseErrors map[string]string) {
+	b.WriteString("\n--- fetched pages ---\n")
+	writeFetchedPages(b, records)
+	if len(parseErrors) == 0 {
+		return
+	}
+	b.WriteString("\n--- parse errors ---\n")
+	for file, msg := range parseErrors {
+		fmt.Fprintf(b, "  %s: %s\n", file, msg)
+	}
+}
 
 func writeFetchedPages(b *strings.Builder, records []fetchRecord) {
 	for _, f := range records {
