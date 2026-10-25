@@ -93,6 +93,9 @@ type GameResult struct {
 	HasProxy                  bool        `json:"has_proxy"`
 	WasCancelled              bool        `json:"was_cancelled"`
 	Sets                      []SetResult `json:"sets"`
+	// OpenRating marks a league Partie that counts towards a woman's Open RGX instead of her
+	// Women RGX, the one the result view starts from.
+	OpenRating bool `json:"open_rating,omitempty"`
 }
 
 // reTournamentTeamIDOnclick matches onclick="load_team_info(\d+, 60615)" and captures the

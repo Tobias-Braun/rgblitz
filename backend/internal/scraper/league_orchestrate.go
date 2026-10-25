@@ -75,7 +75,7 @@ func ScrapePlayerLeagueToday(deps ScrapeDeps, player *db.Player, now time.Time) 
 			pInfo.RGX = self.RGX
 		}
 		for _, f := range todays {
-			games, err := playerPartien(deps, ours, f, numericID)
+			games, err := playerPartien(deps, ours, f, numericID, player.WomenRGX > 0)
 			if err != nil {
 				return TodayResult{}, 0, true, err
 			}
@@ -114,7 +114,7 @@ func fixturesOn(deps ScrapeDeps, fixtures []LeagueFixture, date string) ([]Leagu
 // game results. Each Partie is a pair game: r1 and r2 are the two pairs' RGX sums. Women and
 // Mixed Partien count the roster badge RGX; Open Partien count each player's Open RGX (see
 // openRGX).
-func playerPartien(deps ScrapeDeps, ours leagueSchedule, f LeagueFixture, playerID string) ([]GameResult, error) {
+func playerPartien(deps ScrapeDeps, ours leagueSchedule, f LeagueFixture, playerID string, isWoman bool) ([]GameResult, error) {
 	parties, err := fetchSubgames(deps, f.GameID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch Partien of Begegnung %d: %w", f.GameID, err)
@@ -136,7 +136,8 @@ func playerPartien(deps ScrapeDeps, ours leagueSchedule, f LeagueFixture, player
 			continue
 		}
 		rgxOf := func(tp TeamPlayer) int { return tp.RGX }
-		if isOpenPartie(p.Label) {
+		open := isOpenPartie(p.Label)
+		if open {
 			rgxOf = func(tp TeamPlayer) int { return openRGX(deps.Players, tp) }
 		}
 		r1, ourProxy := pairRGX(p.Pairs[ourSide], ours.Players, rgxOf, proxy)
@@ -144,6 +145,7 @@ func playerPartien(deps ScrapeDeps, ours leagueSchedule, f LeagueFixture, player
 
 		card := GameCard{Round: p.Label + " · " + f.Matchday, WeAreTeamOne: f.WeAreTeamOne, SetScores: p.SetScores}
 		g := GameResultFromCard(card, r1, r2, ourProxy || theirProxy)
+		g.OpenRating = open && isWoman
 		g.OurTeamName = strings.Join(p.Pairs[ourSide], "/")
 		g.OpponentName = fmt.Sprintf("%s (%s)", strings.Join(p.Pairs[theirSide], "/"), f.OpponentName)
 		games = append(games, g)

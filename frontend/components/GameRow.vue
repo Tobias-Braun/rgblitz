@@ -44,7 +44,13 @@ const tone = computed(() =>
       </div>
       <div class="delta-columns">
         <div class="delta-column">
-          <span class="delta-label">RGX</span>
+          <span
+            v-if="game.open_rating"
+            class="delta-label open-rating"
+            title="Zählt für deine Open-RGX"
+            >Open-RGX</span
+          >
+          <span v-else class="delta-label">RGX</span>
           <span class="delta-value" :class="tone">
             {{ game.was_cancelled ? "—" : formatDelta(game.rgx_delta_per_player) }}
             <sup
@@ -210,6 +216,10 @@ const tone = computed(() =>
 
 .delta-value.neutral {
   color: var(--grey);
+}
+
+.delta-label.open-rating {
+  color: var(--text);
 }
 
 .proxy-marker {

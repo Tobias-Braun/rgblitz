@@ -134,6 +134,9 @@ func captureLeagueTeam(run runContext, league *db.LeagueStore, players *db.Playe
 			continue
 		}
 		player := &db.Player{ID: p.NumericID, Name: p.Name, RGX: p.RGX}
+		if indexed, _ := players.GetByNumericID(p.NumericID); indexed != nil {
+			player.WomenRGX = indexed.WomenRGX
+		}
 		result, _, handled, err := scraper.ScrapePlayerLeagueToday(deps, player, run.now)
 		pc.Handled = handled
 		if err != nil {

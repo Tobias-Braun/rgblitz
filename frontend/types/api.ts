@@ -40,6 +40,8 @@ export interface Game {
   has_proxy: boolean;
   was_cancelled: boolean;
   sets: SetScore[];
+  // A woman's league Open Partie: it counts towards her Open RGX, not the Women RGX shown.
+  open_rating?: boolean;
 }
 
 export interface TodayResultOk {

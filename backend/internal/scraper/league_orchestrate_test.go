@@ -126,6 +126,7 @@ func TestScrapePlayerLeagueToday(t *testing.T) {
 
 // The roster badge shows a woman's Women RGX, so her Open Partien take her Open RGX from the
 // player index, and a woman with no Open RGX is proxied. Mixed Partien and men keep the badge.
+// Only a woman's Open Partie is marked as counting towards her Open RGX.
 func TestScrapePlayerLeagueToday_WomanInOpenPartie(t *testing.T) {
 	const subgames = `{"html": "` +
 		`<rg-game-card variant=\"subgame\"><div slot=\"tags\"><span>Open 1</span></div><div class=\"teams\"><div class=\"team\"><span class=\"name\">Schirop/Bottler</span></div><div class=\"team\"><span class=\"name\">Prüfer/Nerad</span></div></div><div class=\"scores\"><div class=\"set\"><span class=\"score\">17</span><span class=\"score\">15</span></div></div></rg-game-card>` +
@@ -139,10 +140,11 @@ func TestScrapePlayerLeagueToday_WomanInOpenPartie(t *testing.T) {
 		"/ajax/get-subgames/324345":        subgames,
 		"/ajax/get-subgames/324333":        unplayedSubgames,
 	}}
-	deps := newLeagueDeps(t, fetcher, db.LeagueMembership{PlayerID: "2329", TeamID: 39500})
+	deps := newLeagueDeps(t, fetcher, db.LeagueMembership{PlayerID: "2329", TeamID: 39500}, db.LeagueMembership{PlayerID: "1001", TeamID: 39500})
+	lena := db.Player{ID: "PZ1001", Name: "Lena Schirop", RGX: 1490, OpenRGX: 1350, WomenRGX: 1490}
 	for _, p := range []db.Player{
 		{ID: "JON2329", Name: "Jonas Bottler", RGX: 1650, OpenRGX: 1650},
-		{ID: "PZ1001", Name: "Lena Schirop", RGX: 1490, OpenRGX: 1350, WomenRGX: 1490},
+		lena,
 		{ID: "PZ50", Name: "Anna Prüfer", RGX: 1390, WomenRGX: 1390},
 	} {
 		if err := deps.Players.Upsert(p); err != nil {
@@ -161,6 +163,17 @@ func TestScrapePlayerLeagueToday_WomanInOpenPartie(t *testing.T) {
 	// Mixed 1: every roster badge as it is, only Ben proxied.
 	if g := result.Games[1]; g.TeamRGX != 1500+1671 || g.OpponentRGX != 1400+1200 {
 		t.Errorf("Mixed 1 r1/r2 = %d/%d, want %d/%d", g.TeamRGX, g.OpponentRGX, 1500+1671, 1400+1200)
+	}
+	if result.Games[0].OpenRating || result.Games[1].OpenRating {
+		t.Error("a man's game is marked as an Open rating")
+	}
+
+	result, _, _, err = scraper.ScrapePlayerLeagueToday(deps, &lena, time.Date(2026, 2, 21, 15, 0, 0, 0, time.UTC))
+	if err != nil || len(result.Games) != 2 {
+		t.Fatalf("Lena: games = %+v, err = %v", result.Games, err)
+	}
+	if !result.Games[0].OpenRating || result.Games[1].OpenRating {
+		t.Errorf("Lena open_rating = %v/%v, want Open 1 only", result.Games[0].OpenRating, result.Games[1].OpenRating)
 	}
 }
 

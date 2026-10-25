@@ -321,6 +321,7 @@ The result is cached in memory for 1 hour; concurrent cache misses share a singl
 | `finished_at` | string (ISO 8601) | When the job reached `done`/`error` |
 | `has_proxy` | boolean | Any RGX value in the calculation was estimated from division default (new player) |
 | `result.games[n].result` | `"W" \| "L" \| "D"` | Win / Loss / Draw for a single game |
+| `result.games[n].open_rating` | boolean | League only: `true` when the player is a woman and the Partie is an Open one, so it counts towards her Open RGX rather than the Women RGX in `player.rgx`. Omitted otherwise. The result view labels such a game "Open-RGX" |
 | `rgx_delta` | integer (signed) | RGX change for a single game; can be negative |
 | `total_delta` | integer (signed) | Sum of all `rgx_delta` values for the day |
 

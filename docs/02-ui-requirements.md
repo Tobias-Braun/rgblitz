@@ -106,6 +106,7 @@ Hard-coded German phrases selected by threshold (see §Mood Text Thresholds).
   - Opponent name (left-aligned)
   - Match result badge: `W` (win) / `L` (loss) / `D` (draw) — color coded green / red / grey
   - RGX delta for that match (`+n` / `-n`) — color coded green (positive) / red (negative)
+  - Above the delta the label "RGX", or "Open-RGX" for a woman's league Open Partie (`open_rating`): it counts towards her Open RGX, not the Women RGX the circle starts from
 - Rows are ordered chronologically (earliest match first)
 
 ---
