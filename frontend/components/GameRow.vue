@@ -45,12 +45,11 @@ const tone = computed(() =>
       <div class="delta-columns">
         <div class="delta-column">
           <span
-            v-if="game.open_rating"
-            class="delta-label open-rating"
-            title="Zählt für deine Open-RGX"
-            >Open-RGX</span
+            class="delta-label"
+            :class="{ 'open-rating': game.open_rating }"
+            :title="game.open_rating ? 'Zählt für deine Open-RGX' : undefined"
+            >{{ game.open_rating ? "Open-RGX" : "RGX" }}</span
           >
-          <span v-else class="delta-label">RGX</span>
           <span class="delta-value" :class="tone">
             {{ game.was_cancelled ? "—" : formatDelta(game.rgx_delta_per_player) }}
             <sup

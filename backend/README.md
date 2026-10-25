@@ -246,7 +246,7 @@ A full tournament costs roughly `1 + divisions + teams` requests — about 110 f
 
 `cmd/reindex` runs the exact same job the Saturday 03:00 CET cron trigger runs — `Scheduler.ScrapeNow()` — against the live `playerzone.roundnetgermany.de` ranking pages, and upserts the results into SQLite. Use it to check the ranking-page scraper still works after a change, or to manually refresh/repair the index without waiting for (or restarting) the weekly schedule.
 
-Both ranking tabs are scraped and merged: `/ranking/rg-index/1` (Open) is the base list, and `/ranking/rg-index/2` (Women) adds every player's Women RGX. Women play Open tournaments too, and their tracked Open RGX and Women RGX can diverge, so the index stores both apart (`open_rgx`, `women_rgx`); the displayed `rgx` is the Women RGX for those players. A league job prices a woman's Open Partie with her `open_rgx`. If the Women tab fails to fetch, the reindex still completes with Open-only data (logged as a warning, not fatal).
+Both ranking tabs are scraped and merged: `/ranking/rg-index/1` (Open) is the base list, and `/ranking/rg-index/2` (Women) adds every player's Women RGX. Women play Open tournaments too, and their tracked Open RGX and Women RGX can diverge, so the index stores both apart (`open_rgx`, `women_rgx`); the displayed `rgx` is the Women RGX for those players. A league job prices a woman's Open Partie with her `open_rgx`. If the Women tab fails to fetch, the reindex still completes from the Open tab and keeps each player's Women RGX from the last scrape (logged as a warning, not fatal).
 
 ```sh
 cd backend

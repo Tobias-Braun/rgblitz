@@ -27,7 +27,8 @@ import (
 // Returns the number of teams that failed.
 func captureLeague(run runContext, teamArgs []string) int {
 	league := db.NewLeagueStore(run.conn)
-	players := db.NewPlayerStore(run.conn)
+	players, closeIndex := newRunIndex()
+	defer closeIndex()
 	index, sharedRecords, err := fetchIndex(run)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "  warning: %v — women's Open Partien use their roster RGX\n", err)
@@ -198,17 +199,38 @@ type leaguePlayerCapture struct {
 	Result    *scraper.TodayResult `json:"result,omitempty"`
 }
 
-// perPlayerDelta is the player's own RGX change: each Partie moves both players of a pair by
-// half the pair's delta.
-func (p leaguePlayerCapture) perPlayerDelta() float64 {
+// newRunIndex opens an empty player index for this run alone. The --db-path file outlives the
+// run, so an index kept there would leak into a later replay of a snapshot without rankings.
+func newRunIndex() (*db.PlayerStore, func()) {
+	dir, err := os.MkdirTemp("", "rgblitz-fixturecapture-index")
+	if err != nil {
+		fatalf("create player index dir: %v", err)
+	}
+	conn, err := db.Open(filepath.Join(dir, "players.db"))
+	if err != nil {
+		fatalf("open player index: %v", err)
+	}
+	return db.NewPlayerStore(conn), func() {
+		conn.Close()
+		os.RemoveAll(dir)
+	}
+}
+
+// perPlayerDeltas is the player's own RGX change: each Partie moves both players of a pair by
+// half the pair's delta. A woman's Open Partien move her Open RGX, not the roster RGX, so they
+// are summed apart.
+func (p leaguePlayerCapture) perPlayerDeltas() (roster, open float64) {
 	if p.Result == nil {
-		return 0
+		return 0, 0
 	}
-	sum := 0.0
 	for _, g := range p.Result.Games {
-		sum += float64(g.RGXDeltaPerPlayer)
+		if g.OpenRating {
+			open += float64(g.RGXDeltaPerPlayer)
+		} else {
+			roster += float64(g.RGXDeltaPerPlayer)
+		}
 	}
-	return sum
+	return roster, open
 }
 
 // leagueParsed holds the intermediates re-derived from the saved pages, which also verifies
@@ -352,9 +374,13 @@ func leagueReport(c leagueCapture) string {
 		case !pl.Handled:
 			fmt.Fprintf(&b, "  %-28s rgx=%-5d not handled (team doesn't play today)\n", pl.Name, pl.RosterRGX)
 		default:
-			delta := pl.perPlayerDelta()
-			fmt.Fprintf(&b, "  %-28s rgx=%-5d partien=%d pair_delta_sum=%+d player_delta=%+.1f → %.1f\n",
+			delta, openDelta := pl.perPlayerDeltas()
+			fmt.Fprintf(&b, "  %-28s rgx=%-5d partien=%d pair_delta_sum=%+d player_delta=%+.1f → %.1f",
 				pl.Name, pl.RosterRGX, len(pl.Result.Games), pl.Result.TotalDelta, delta, float64(pl.RosterRGX)+delta)
+			if openDelta != 0 {
+				fmt.Fprintf(&b, " open_rgx_delta=%+.1f", openDelta)
+			}
+			b.WriteString("\n")
 			writeGameLines(&b, pl.Result.Games)
 		}
 	}
