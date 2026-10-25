@@ -1,5 +1,15 @@
 [
   {
+    "version": "0.10.0",
+    "date": "2026-10-25",
+    "internal": false,
+    "changes": [
+      "Bei Open-Partien in der Liga wird für Spielerinnen jetzt die Open-RGX statt der Damen-RGX verwendet, sodass die berechneten Änderungen stimmen.",
+      "Spielerinnen sehen bei einer Open-Partie in der Liga über der Änderung jetzt „Open-RGX“ statt „RGX“.",
+      "Fehler behoben, durch den nach einem fehlgeschlagenen Abruf der Damen-Rangliste die Damen-RGX zeitweise verloren ging."
+    ]
+  },
+  {
     "version": "0.9.0",
     "date": "2026-10-18",
     "internal": false,
