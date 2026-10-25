@@ -51,7 +51,7 @@ func main() {
 	defer scheduler.Stop()
 	buildLeagueIndexInBackground(scheduler, league)
 
-	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: memCache, ProxyURL: api.ProxyURL, Tournaments: tournaments, League: league}
+	scrapeDeps := scraper.ScrapeDeps{Fetcher: fetcher, Cache: memCache, ProxyURL: api.ProxyURL, Tournaments: tournaments, League: league, Players: players}
 	queue := jobqueue.New(jobs, jobStats, players, scrapeDeps, permissions, cfg.RespectPermission, time.Now)
 	resumeStuckJobs(jobs, queue)
 	queue.Start()

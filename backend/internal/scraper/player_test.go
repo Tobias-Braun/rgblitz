@@ -200,6 +200,13 @@ func TestMergeWomenRGX(t *testing.T) {
 	if got, ok := byID["D"]; !ok || got.RGX != 1700 {
 		t.Errorf("Dana = %+v, ok=%v — a Women-only player must still appear in the merged index", got, ok)
 	}
+
+	// Both ranking values are kept apart; a Women RGX marks a woman.
+	for id, want := range map[string][2]int{"A": {1500, 1450}, "B": {1600, 0}, "D": {0, 1700}} {
+		if got := byID[id]; got.OpenRGX != want[0] || got.WomenRGX != want[1] {
+			t.Errorf("%s open/women = %d/%d, want %d/%d", got.Name, got.OpenRGX, got.WomenRGX, want[0], want[1])
+		}
+	}
 }
 
 // A player's ID is avatar-derived when her ranking row has an avatar and a
@@ -223,6 +230,6 @@ func TestMergeWomenRGX_FallsBackToNameWhenIDsDiffer(t *testing.T) {
 		t.Fatalf("got %+v, want a single entry with RGX=1450 (Women RGX via name match)", merged)
 	}
 	if merged[0].ID != "PZ9001" {
-		t.Errorf("ID = %q, want unchanged %q (only RGX should be overridden)", merged[0].ID, "PZ9001")
+		t.Errorf("ID = %q, want unchanged %q (only the RGX values should change)", merged[0].ID, "PZ9001")
 	}
 }

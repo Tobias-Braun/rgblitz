@@ -155,7 +155,7 @@ func (s *Scheduler) scrapePlayerIndex() error {
 		return err
 	}
 
-	// The Women tab only overrides RGX for players who appear on it — if it
+	// The Women tab only adds Women RGX for players who appear on it — if it
 	// fails to load, fall back to the Open-only index rather than aborting
 	// the whole scrape.
 	women, err := scraper.FetchRankingPage(s.fetcher, scraper.RankingWomenPath)

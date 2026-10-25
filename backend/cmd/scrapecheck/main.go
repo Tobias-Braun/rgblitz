@@ -91,7 +91,7 @@ func main() {
 		women = nil
 	}
 	players := scraper.MergeWomenRGX(open, women)
-	fmt.Printf("  found %d players in the index (%d with a Women RGX override)\n", len(players), len(women))
+	fmt.Printf("  found %d players in the index (%d with a Women RGX)\n", len(players), len(women))
 
 	player, err := findPlayer(players, *playerQuery)
 	if err != nil {

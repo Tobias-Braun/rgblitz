@@ -23,10 +23,11 @@ func main() {
 	}
 	defer f.Close()
 
-	players, err := scraper.ParseRankingPage(f)
+	open, err := scraper.ParseRankingPage(f)
 	if err != nil {
 		log.Fatalf("parse ranking page: %v", err)
 	}
+	players := scraper.MergeWomenRGX(open, nil)
 	fmt.Printf("parsed %d players from fixture\n", len(players))
 
 	database, err := db.Open(*dbPath)

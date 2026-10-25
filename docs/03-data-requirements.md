@@ -96,6 +96,8 @@ In the real playerzone system, new players go through a pre-calculation round th
 | `club_name` | playerzone player page | |
 | `club_logo_url` | playerzone club page | Proxied through our backend |
 | `current_rgx` | playerzone player page | The player's current ELO rating |
+| `open_rgx` | Open ranking tab (`/ranking/rg-index/1`) | 0 = none. The Open tab also lists every woman who has an Open RGX |
+| `women_rgx` | Women ranking tab (`/ranking/rg-index/2`) | 0 = none; a value marks the player as a woman. The displayed RGX is this value when set, else `open_rgx` |
 
 ### Tournament Result (daily data)
 
@@ -171,6 +173,11 @@ in every dimension the tournament pipeline relies on:
 
 Every Partie counts towards RGX, which playerzone recalculates after each matchday, so the
 pre-matchday RGX shown on the rosters is the fixed baseline for the day, as for a tournament.
+A roster shows one RGX per player — a woman's Women RGX — but a woman has two: Open Partien are
+rated with the Open RGX, Women and Mixed Partien with the Women RGX. So for a woman (the player
+index holds a `women_rgx` for her) in an Open Partie, `r1`/`r2` count her index `open_rgx`
+instead of the roster value, and a woman with no Open RGX gets the division starting value
+(`has_proxy`). Men, and every Women or Mixed Partie, use the roster value.
 Only the regular season is supported; the final phases (Final Six, Elite Eight, Champions Cup)
 carry no matchday group and are skipped.
 
@@ -202,7 +209,7 @@ plays today, goes through the tournament pipeline unchanged.
 
 - **Schedule**: Every **Saturday and Sunday at 03:00 CET** (cron job in Go backend, `internal/cron/jobs.go`) — comfortably before either day's first match, and running on both days means a Saturday tournament's RGX changes are picked up before a Sunday tournament computes its own deltas
 - **Startup fallback**: Also runs once at process startup if the `players` table has fewer than 1000 rows, so a fresh deployment doesn't wait up to a week for a usable autocomplete (`cmd/server/main.go`)
-- **What**: Scrape full player list from playerzone — all active players with name, ID, avatar URL, club name, club logo URL
+- **What**: Scrape full player list from playerzone — all active players with name, ID, avatar URL, club name, club logo URL, from both ranking tabs. A player on both tabs (matched by ID, else by exact name, since a player's ID can differ between the tabs) is a woman with an Open RGX; her Open and Women RGX are stored apart (`open_rgx`, `women_rgx`)
 - **Storage**: Local database table `players` (upsert by player ID)
 - **Purpose**: Powers the autocomplete; no live playerzone request per search keystroke
 - **Staleness tolerance**: Up to a few days old is acceptable

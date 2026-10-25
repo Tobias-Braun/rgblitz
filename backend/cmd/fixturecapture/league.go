@@ -20,10 +20,24 @@ import (
 // captureLeague snapshots one league team's matchday per team registration ID. Every roster
 // player runs through the real ScrapePlayerLeagueToday, so a snapshot holds exactly the pages
 // production fetches for that team: its schedule page, the matchday group page of each
-// Begegnung, and for today's Begegnungen their Partien and the opponents' schedule pages.
+// Begegnung, and for today's Begegnungen their Partien and the opponents' schedule pages. The
+// rankings are fetched once for the run and linked into every snapshot: a woman's Open Partie
+// is priced with her Open RGX from the player index. Snapshots from before that have no
+// rankings and replay with every roster badge as it is.
 // Returns the number of teams that failed.
 func captureLeague(run runContext, teamArgs []string) int {
 	league := db.NewLeagueStore(run.conn)
+	players := db.NewPlayerStore(run.conn)
+	index, sharedRecords, err := fetchIndex(run)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  warning: %v — women's Open Partien use their roster RGX\n", err)
+	}
+	for _, p := range index {
+		if err := players.Upsert(p); err != nil {
+			fatalf("fill player index: %v", err)
+		}
+	}
+
 	failures := 0
 	for _, arg := range teamArgs {
 		teamID, err := strconv.Atoi(arg)
@@ -38,14 +52,18 @@ func captureLeague(run runContext, teamArgs []string) int {
 			failures++
 			continue
 		}
+		sharedPaths, err := linkShared(run.sharedDir, snapDir, sharedRecords)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  warning: link shared pages: %v\n", err)
+		}
 		run.rec.startSnapshot(snapDir, uniquePageName)
 		fmt.Printf("capturing league team %d → %s\n", teamID, snapDir)
 
-		snapshot := captureLeagueTeam(run, league, teamID)
+		snapshot := captureLeagueTeam(run, league, players, teamID)
 		snapshot.Fetched = run.rec.records()
 		snapshot.Parsed = reparseLeague(snapDir, snapshot.Fetched, teamID)
 
-		if err := run.rec.writeManifest(snapDir, nil); err != nil {
+		if err := run.rec.writeManifest(snapDir, sharedPaths); err != nil {
 			fmt.Fprintf(os.Stderr, "  warning: write manifest: %v\n", err)
 		}
 		if err := writeLeagueCapture(snapDir, snapshot); err != nil {
@@ -61,7 +79,7 @@ func captureLeague(run runContext, teamArgs []string) int {
 	return failures
 }
 
-func captureLeagueTeam(run runContext, league *db.LeagueStore, teamID int) leagueCapture {
+func captureLeagueTeam(run runContext, league *db.LeagueStore, players *db.PlayerStore, teamID int) leagueCapture {
 	snapshot := leagueCapture{
 		CapturedAt: run.now.Format(time.RFC3339),
 		Date:       run.now.Format("2006-01-02"),
@@ -106,6 +124,7 @@ func captureLeagueTeam(run runContext, league *db.LeagueStore, teamID int) leagu
 		Cache:    cache.New(),
 		ProxyURL: func(s string) string { return s },
 		League:   league,
+		Players:  players,
 	}
 	for _, p := range roster.Players {
 		pc := leaguePlayerCapture{Name: p.Name, NumericID: p.NumericID, RosterRGX: p.RGX}
