@@ -41,12 +41,10 @@ func FetchRankingPage(fetcher Fetcher, path string) ([]db.Player, error) {
 // MergeWomenRGX combines the Open ranking with the Women ranking into a single
 // player index containing the union of both: every Open entry, plus any Women
 // entry that isn't also on the Open list (a woman who has never played an
-// Open tournament). For any player who appears on both, her Open entry is
-// kept (it usually carries richer data — club, avatar, games played) but her
-// RGX is overridden with her Women RGX, since the persisted index must always
-// reflect the Women value for players who have one — a specific tournament's
-// live schedule page is the source of truth for which RGX actually applies on
-// a given day (see ScrapeTodayResult), not this index.
+// Open tournament). Every entry keeps its Open and Women RGX apart (OpenRGX,
+// WomenRGX). For a player who appears on both — a woman with an Open RGX — her
+// Open entry is kept (it usually carries richer data — club, avatar, games
+// played) and her displayed RGX is her Women value.
 //
 // IDs alone aren't a reliable join key here: a player's ID is avatar-derived
 // when the ranking row has an avatar and falls back to an internal numeric ID
@@ -69,12 +67,14 @@ func MergeWomenRGX(open, women []db.Player) []db.Player {
 	matched := make([]bool, len(women))
 	merged := make([]db.Player, len(open))
 	for i, p := range open {
+		p.OpenRGX = p.RGX
 		idx, ok := womenIdxByID[p.ID]
 		if !ok {
 			idx, ok = womenIdxByName[strings.ToLower(p.Name)]
 		}
 		if ok {
 			p.RGX = women[idx].RGX
+			p.WomenRGX = women[idx].RGX
 			matched[idx] = true
 		}
 		merged[i] = p
@@ -84,6 +84,7 @@ func MergeWomenRGX(open, women []db.Player) []db.Player {
 	// are added as-is — discarding them would silently drop real players.
 	for i, w := range women {
 		if !matched[i] {
+			w.WomenRGX = w.RGX
 			merged = append(merged, w)
 		}
 	}

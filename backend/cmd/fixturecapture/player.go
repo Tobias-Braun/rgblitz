@@ -16,16 +16,14 @@ import (
 	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
-// capturePlayers snapshots exactly what each named player's /today request fetches, by
-// running the real ScrapePlayerToday pipeline. Returns the number of players that failed.
-func capturePlayers(run runContext, queries []string) int {
-	// The rankings are the player index the pipeline resolves names against; fetched once
-	// for the run and linked into every snapshot so each stays self-contained.
+// fetchIndex fetches both ranking tabs into the run's shared directory and merges them into the
+// player index. The returned records are the shared pages to link into every snapshot.
+func fetchIndex(run runContext) ([]db.Player, []fetchRecord, error) {
 	run.rec.startSnapshot(run.sharedDir, fixturePageName)
 	fmt.Println("fetching the player index (Open + Women rankings) ...")
 	open, err := scraper.FetchRankingPage(run.rec, scraper.RankingOpenPath)
 	if err != nil {
-		fatalf("fetch open ranking page: %v", err)
+		return nil, nil, fmt.Errorf("fetch open ranking page: %w", err)
 	}
 	women, err := scraper.FetchRankingPage(run.rec, scraper.RankingWomenPath)
 	if err != nil {
@@ -33,8 +31,19 @@ func capturePlayers(run runContext, queries []string) int {
 		women = nil
 	}
 	index := scraper.MergeWomenRGX(open, women)
-	fmt.Printf("  indexed %d players (%d with a Women RGX override)\n", len(index), len(women))
-	sharedRecords := run.rec.records()
+	fmt.Printf("  indexed %d players (%d with a Women RGX)\n", len(index), len(women))
+	return index, run.rec.records(), nil
+}
+
+// capturePlayers snapshots exactly what each named player's /today request fetches, by
+// running the real ScrapePlayerToday pipeline. Returns the number of players that failed.
+func capturePlayers(run runContext, queries []string) int {
+	// The rankings are the player index the pipeline resolves names against; fetched once
+	// for the run and linked into every snapshot so each stays self-contained.
+	index, sharedRecords, err := fetchIndex(run)
+	if err != nil {
+		fatalf("%v", err)
+	}
 
 	tournaments := db.NewTournamentStore(run.conn)
 	failures := 0

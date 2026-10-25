@@ -3,6 +3,7 @@ package scraper
 import (
 	"bytes"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -74,7 +75,7 @@ func ScrapePlayerLeagueToday(deps ScrapeDeps, player *db.Player, now time.Time) 
 			pInfo.RGX = self.RGX
 		}
 		for _, f := range todays {
-			games, err := playerPartien(deps, ours, f, numericID)
+			games, err := playerPartien(deps, ours, f, numericID, player.WomenRGX > 0)
 			if err != nil {
 				return TodayResult{}, 0, true, err
 			}
@@ -110,8 +111,10 @@ func fixturesOn(deps ScrapeDeps, fixtures []LeagueFixture, date string) ([]Leagu
 }
 
 // playerPartien turns the played Partien of one Begegnung that the player took part in into
-// game results. Each Partie is a pair game: r1 and r2 are the two pairs' RGX sums.
-func playerPartien(deps ScrapeDeps, ours leagueSchedule, f LeagueFixture, playerID string) ([]GameResult, error) {
+// game results. Each Partie is a pair game: r1 and r2 are the two pairs' RGX sums. Women and
+// Mixed Partien count the roster badge RGX; Open Partien count each player's Open RGX (see
+// openRGX).
+func playerPartien(deps ScrapeDeps, ours leagueSchedule, f LeagueFixture, playerID string, isWoman bool) ([]GameResult, error) {
 	parties, err := fetchSubgames(deps, f.GameID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch Partien of Begegnung %d: %w", f.GameID, err)
@@ -132,11 +135,17 @@ func playerPartien(deps ScrapeDeps, ours leagueSchedule, f LeagueFixture, player
 		if len(p.SetScores) == 0 || !pairIncludes(p.Pairs[ourSide], ours.Players, playerID) {
 			continue
 		}
-		r1, ourProxy := pairRGX(p.Pairs[ourSide], ours.Players, proxy)
-		r2, theirProxy := pairRGX(p.Pairs[theirSide], opponent.Players, proxy)
+		rgxOf := func(tp TeamPlayer) int { return tp.RGX }
+		open := isOpenPartie(p.Label)
+		if open {
+			rgxOf = func(tp TeamPlayer) int { return openRGX(deps.Players, tp) }
+		}
+		r1, ourProxy := pairRGX(p.Pairs[ourSide], ours.Players, rgxOf, proxy)
+		r2, theirProxy := pairRGX(p.Pairs[theirSide], opponent.Players, rgxOf, proxy)
 
 		card := GameCard{Round: p.Label + " · " + f.Matchday, WeAreTeamOne: f.WeAreTeamOne, SetScores: p.SetScores}
 		g := GameResultFromCard(card, r1, r2, ourProxy || theirProxy)
+		g.OpenRating = open && isWoman
 		g.OurTeamName = strings.Join(p.Pairs[ourSide], "/")
 		g.OpponentName = fmt.Sprintf("%s (%s)", strings.Join(p.Pairs[theirSide], "/"), f.OpponentName)
 		games = append(games, g)
@@ -167,14 +176,38 @@ func pairIncludes(pair []string, roster []TeamPlayer, playerID string) bool {
 	return false
 }
 
-// pairRGX sums a pair's RGX. A player who can't be resolved from the roster, or has no RGX
-// yet, counts with the proxy value.
-func pairRGX(pair []string, roster []TeamPlayer, proxy int) (sum int, hasProxy bool) {
+// isOpenPartie reports whether a Partie ("Open 1", "Damen", "Mixed 2", …) is rated with the
+// Open RGX. Women and Mixed Partien are rated with the Women RGX.
+func isOpenPartie(label string) bool {
+	return strings.HasPrefix(strings.ToLower(label), "open")
+}
+
+// openRGX is a roster player's Open RGX. The roster badge shows a woman's Women RGX, so for a
+// woman (the index holds a Women RGX for her) it comes from the index instead: 0 when she has
+// no Open RGX, which the caller proxies like any missing value.
+func openRGX(players *db.PlayerStore, p TeamPlayer) int {
+	if players == nil || p.NumericID == "" {
+		return p.RGX
+	}
+	indexed, err := players.GetByNumericID(p.NumericID)
+	if err != nil {
+		slog.Warn("league: player index lookup failed, using roster RGX", "player_id", p.NumericID, "error", err)
+		return p.RGX
+	}
+	if indexed == nil || indexed.WomenRGX == 0 {
+		return p.RGX
+	}
+	return indexed.OpenRGX
+}
+
+// pairRGX sums a pair's RGX, as rgxOf reads it from each roster player. A player who can't be
+// resolved from the roster, or has no RGX, counts with the proxy value.
+func pairRGX(pair []string, roster []TeamPlayer, rgxOf func(TeamPlayer) int, proxy int) (sum int, hasProxy bool) {
 	for i := range 2 {
 		rgx := 0
 		if i < len(pair) {
 			if p, ok := resolvePairName(pair[i], roster); ok {
-				rgx = p.RGX
+				rgx = rgxOf(p)
 			}
 		}
 		if rgx <= 0 {

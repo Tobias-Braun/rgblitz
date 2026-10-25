@@ -155,12 +155,12 @@ func (s *Scheduler) scrapePlayerIndex() error {
 		return err
 	}
 
-	// The Women tab only overrides RGX for players who appear on it — if it
-	// fails to load, fall back to the Open-only index rather than aborting
-	// the whole scrape.
+	// The Women tab only adds Women RGX for players who appear on it — if it
+	// fails to load, index the Open tab anyway and keep each player's Women
+	// RGX from the last scrape, rather than aborting the whole scrape.
 	women, err := scraper.FetchRankingPage(s.fetcher, scraper.RankingWomenPath)
 	if err != nil {
-		slog.Warn("cron: women ranking fetch failed, indexing Open RGX only", "error", err)
+		slog.Warn("cron: women ranking fetch failed, keeping the last Women RGX", "error", err)
 		women = nil
 	}
 
@@ -169,6 +169,9 @@ func (s *Scheduler) scrapePlayerIndex() error {
 	updated, added, errs := 0, 0, 0
 	for _, p := range players {
 		existing, _ := s.players.GetByID(p.ID)
+		if women == nil && existing != nil && existing.WomenRGX > 0 {
+			p.RGX, p.WomenRGX = existing.WomenRGX, existing.WomenRGX
+		}
 		if err := s.players.Upsert(p); err != nil {
 			slog.Error("cron: upsert player", "player_id", p.ID, "error", err)
 			errs++

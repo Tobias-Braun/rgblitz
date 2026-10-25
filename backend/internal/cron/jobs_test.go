@@ -1,13 +1,16 @@
 package cron_test
 
 import (
+	"bytes"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/tobiasmarkusbraun/rgblitz/internal/cron"
 	"github.com/tobiasmarkusbraun/rgblitz/internal/db"
+	"github.com/tobiasmarkusbraun/rgblitz/internal/scraper"
 )
 
 // spyFetcher records every path fetched and serves canned bodies.
@@ -92,5 +95,36 @@ func TestScrapePlayerIndex_IgnoresRobotsWhenFlagOff(t *testing.T) {
 		if p == "/robots.txt" {
 			t.Fatal("robots.txt was fetched even though RESPECT_PERMISSION is off")
 		}
+	}
+}
+
+// A failed Women tab must not make the index forget a woman's Women RGX until the next scrape.
+func TestScrapePlayerIndex_KeepsWomenRGXWhenWomenTabFails(t *testing.T) {
+	ranking, err := os.ReadFile("../../../scraper/fixtures/ranking.html")
+	if err != nil {
+		t.Fatalf("read ranking fixture: %v", err)
+	}
+	open, err := scraper.ParseRankingPage(bytes.NewReader(ranking))
+	if err != nil || len(open) == 0 {
+		t.Fatalf("parse ranking fixture: %d players, %v", len(open), err)
+	}
+	woman := open[0]
+	woman.OpenRGX, woman.WomenRGX, woman.RGX = woman.RGX, 1234, 1234
+
+	players := newTestDB(t)
+	if err := players.Upsert(woman); err != nil {
+		t.Fatal(err)
+	}
+	fetcher := &spyFetcher{bodies: map[string]string{scraper.RankingOpenPath: string(ranking)}}
+	if err := cron.NewScheduler(players, newTestJobStore(t), nil, fetcher, nil, false).ScrapeNow(); err != nil {
+		t.Fatalf("ScrapeNow: %v", err)
+	}
+
+	got, err := players.GetByID(woman.ID)
+	if err != nil || got == nil {
+		t.Fatalf("GetByID: %+v, %v", got, err)
+	}
+	if got.WomenRGX != 1234 || got.RGX != 1234 || got.OpenRGX != woman.OpenRGX {
+		t.Errorf("rgx/open/women = %d/%d/%d, want 1234/%d/1234", got.RGX, got.OpenRGX, got.WomenRGX, woman.OpenRGX)
 	}
 }

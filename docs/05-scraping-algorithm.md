@@ -313,7 +313,8 @@ FUNCTION ScrapePlayerLeagueToday(player, now):
       opponent = schedule page of the opponent team (roster only)
       FOR each played Partie whose own-side names resolve to this player:
         r1 = our pair's RGX sum, r2 = their pair's RGX sum
-             (names resolved uniquely against the rosters; unresolved or 0 → proxy)
+             (names resolved uniquely against the rosters; unresolved or 0 → proxy;
+              a woman in an Open Partie counts her index open_rgx, not the roster value)
         game = RGX formula(r1, r2, sets)
   IF no team plays today: RETURN not handled       # tournament pipeline runs instead
   RETURN ok, competition = "league", games

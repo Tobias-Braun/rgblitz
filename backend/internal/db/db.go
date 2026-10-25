@@ -33,6 +33,8 @@ func migrate(db *sql.DB) error {
 			avatar_url    TEXT NOT NULL DEFAULT '',
 			club_logo_url TEXT NOT NULL DEFAULT '',
 			rgx           INTEGER NOT NULL DEFAULT 0,
+			open_rgx      INTEGER NOT NULL DEFAULT 0,
+			women_rgx     INTEGER NOT NULL DEFAULT 0,
 			games_played  INTEGER NOT NULL DEFAULT 0,
 			is_new        BOOLEAN NOT NULL DEFAULT 0,
 			name_collision BOOLEAN NOT NULL DEFAULT 0,
@@ -107,5 +109,24 @@ func migrate(db *sql.DB) error {
 			created_at DATETIME NOT NULL
 		);
 	`)
+	if err != nil {
+		return err
+	}
+	// Databases created before the index kept both ranking values; the next index scrape fills them.
+	for _, col := range []string{"open_rgx", "women_rgx"} {
+		if err := addColumnIfMissing(db, "players", col, "INTEGER NOT NULL DEFAULT 0"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func addColumnIfMissing(db *sql.DB, table, column, definition string) error {
+	var exists bool
+	err := db.QueryRow(`SELECT COUNT(*) > 0 FROM pragma_table_info(?) WHERE name = ?`, table, column).Scan(&exists)
+	if err != nil || exists {
+		return err
+	}
+	_, err = db.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, table, column, definition))
 	return err
 }

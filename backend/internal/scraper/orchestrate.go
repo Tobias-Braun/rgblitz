@@ -45,6 +45,8 @@ type ScrapeDeps struct {
 	ProxyURL    func(string) string
 	Tournaments *db.TournamentStore
 	League      *db.LeagueStore
+	// Players is the player index; league jobs read a woman's Open RGX from it.
+	Players *db.PlayerStore
 }
 
 // competitionDayRollover is how long after midnight the previous day's competition still counts

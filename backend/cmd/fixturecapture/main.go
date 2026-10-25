@@ -27,9 +27,9 @@
 //	go run ./cmd/fixturecapture --league "39500,39823"
 //
 // Captures one Deutsche Roundnet Liga team's matchday per team ID (the {id} of the team's
-// /tournaments/schedule/team/{id} page): its schedule page, the matchday group page of each
-// Begegnung, and for today's Begegnungen the /ajax/get-subgames Partien and the opponents'
-// schedule pages. Every roster player runs through the real ScrapePlayerLeagueToday, and the
+// /tournaments/schedule/team/{id} page): the rankings (shared), its schedule page, the
+// matchday group page of each Begegnung, and for today's Begegnungen the /ajax/get-subgames
+// Partien and the opponents' schedule pages. Every roster player runs through the real ScrapePlayerLeagueToday, and the
 // report lists each player's per-Partie deltas next to the RGX their roster card shows — the
 // pre-matchday baseline during a matchday, the recalculated value once playerzone has run it.
 //
@@ -111,7 +111,7 @@ func main() {
 		source = scraper.NewHTTPFetcher(scraper.NewRateLimiter(2 * time.Second))
 	}
 
-	// One recorder for the whole run, so shared pages (the rankings in player mode, the
+	// One recorder for the whole run, so shared pages (the rankings in player and league mode, the
 	// tournament list in tournament mode) are fetched once and linked into every snapshot.
 	rec := &recordingFetcher{inner: source}
 	sharedDir := filepath.Join(runDir, "_shared-"+now.Format("1504"))

@@ -20,10 +20,25 @@ import (
 // captureLeague snapshots one league team's matchday per team registration ID. Every roster
 // player runs through the real ScrapePlayerLeagueToday, so a snapshot holds exactly the pages
 // production fetches for that team: its schedule page, the matchday group page of each
-// Begegnung, and for today's Begegnungen their Partien and the opponents' schedule pages.
+// Begegnung, and for today's Begegnungen their Partien and the opponents' schedule pages. The
+// rankings are fetched once for the run and linked into every snapshot: a woman's Open Partie
+// is priced with her Open RGX from the player index. Snapshots from before that have no
+// rankings and replay with every roster badge as it is.
 // Returns the number of teams that failed.
 func captureLeague(run runContext, teamArgs []string) int {
 	league := db.NewLeagueStore(run.conn)
+	players, closeIndex := newRunIndex()
+	defer closeIndex()
+	index, sharedRecords, err := fetchIndex(run)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  warning: %v — women's Open Partien use their roster RGX\n", err)
+	}
+	for _, p := range index {
+		if err := players.Upsert(p); err != nil {
+			fatalf("fill player index: %v", err)
+		}
+	}
+
 	failures := 0
 	for _, arg := range teamArgs {
 		teamID, err := strconv.Atoi(arg)
@@ -38,14 +53,18 @@ func captureLeague(run runContext, teamArgs []string) int {
 			failures++
 			continue
 		}
+		sharedPaths, err := linkShared(run.sharedDir, snapDir, sharedRecords)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  warning: link shared pages: %v\n", err)
+		}
 		run.rec.startSnapshot(snapDir, uniquePageName)
 		fmt.Printf("capturing league team %d → %s\n", teamID, snapDir)
 
-		snapshot := captureLeagueTeam(run, league, teamID)
+		snapshot := captureLeagueTeam(run, league, players, teamID)
 		snapshot.Fetched = run.rec.records()
 		snapshot.Parsed = reparseLeague(snapDir, snapshot.Fetched, teamID)
 
-		if err := run.rec.writeManifest(snapDir, nil); err != nil {
+		if err := run.rec.writeManifest(snapDir, sharedPaths); err != nil {
 			fmt.Fprintf(os.Stderr, "  warning: write manifest: %v\n", err)
 		}
 		if err := writeLeagueCapture(snapDir, snapshot); err != nil {
@@ -61,7 +80,7 @@ func captureLeague(run runContext, teamArgs []string) int {
 	return failures
 }
 
-func captureLeagueTeam(run runContext, league *db.LeagueStore, teamID int) leagueCapture {
+func captureLeagueTeam(run runContext, league *db.LeagueStore, players *db.PlayerStore, teamID int) leagueCapture {
 	snapshot := leagueCapture{
 		CapturedAt: run.now.Format(time.RFC3339),
 		Date:       run.now.Format("2006-01-02"),
@@ -106,6 +125,7 @@ func captureLeagueTeam(run runContext, league *db.LeagueStore, teamID int) leagu
 		Cache:    cache.New(),
 		ProxyURL: func(s string) string { return s },
 		League:   league,
+		Players:  players,
 	}
 	for _, p := range roster.Players {
 		pc := leaguePlayerCapture{Name: p.Name, NumericID: p.NumericID, RosterRGX: p.RGX}
@@ -115,6 +135,9 @@ func captureLeagueTeam(run runContext, league *db.LeagueStore, teamID int) leagu
 			continue
 		}
 		player := &db.Player{ID: p.NumericID, Name: p.Name, RGX: p.RGX}
+		if indexed, _ := players.GetByNumericID(p.NumericID); indexed != nil {
+			player.WomenRGX = indexed.WomenRGX
+		}
 		result, _, handled, err := scraper.ScrapePlayerLeagueToday(deps, player, run.now)
 		pc.Handled = handled
 		if err != nil {
@@ -176,17 +199,38 @@ type leaguePlayerCapture struct {
 	Result    *scraper.TodayResult `json:"result,omitempty"`
 }
 
-// perPlayerDelta is the player's own RGX change: each Partie moves both players of a pair by
-// half the pair's delta.
-func (p leaguePlayerCapture) perPlayerDelta() float64 {
+// newRunIndex opens an empty player index for this run alone. The --db-path file outlives the
+// run, so an index kept there would leak into a later replay of a snapshot without rankings.
+func newRunIndex() (*db.PlayerStore, func()) {
+	dir, err := os.MkdirTemp("", "rgblitz-fixturecapture-index")
+	if err != nil {
+		fatalf("create player index dir: %v", err)
+	}
+	conn, err := db.Open(filepath.Join(dir, "players.db"))
+	if err != nil {
+		fatalf("open player index: %v", err)
+	}
+	return db.NewPlayerStore(conn), func() {
+		conn.Close()
+		os.RemoveAll(dir)
+	}
+}
+
+// perPlayerDeltas is the player's own RGX change: each Partie moves both players of a pair by
+// half the pair's delta. A woman's Open Partien move her Open RGX, not the roster RGX, so they
+// are summed apart.
+func (p leaguePlayerCapture) perPlayerDeltas() (roster, open float64) {
 	if p.Result == nil {
-		return 0
+		return 0, 0
 	}
-	sum := 0.0
 	for _, g := range p.Result.Games {
-		sum += float64(g.RGXDeltaPerPlayer)
+		if g.OpenRating {
+			open += float64(g.RGXDeltaPerPlayer)
+		} else {
+			roster += float64(g.RGXDeltaPerPlayer)
+		}
 	}
-	return sum
+	return roster, open
 }
 
 // leagueParsed holds the intermediates re-derived from the saved pages, which also verifies
@@ -330,9 +374,13 @@ func leagueReport(c leagueCapture) string {
 		case !pl.Handled:
 			fmt.Fprintf(&b, "  %-28s rgx=%-5d not handled (team doesn't play today)\n", pl.Name, pl.RosterRGX)
 		default:
-			delta := pl.perPlayerDelta()
-			fmt.Fprintf(&b, "  %-28s rgx=%-5d partien=%d pair_delta_sum=%+d player_delta=%+.1f → %.1f\n",
+			delta, openDelta := pl.perPlayerDeltas()
+			fmt.Fprintf(&b, "  %-28s rgx=%-5d partien=%d pair_delta_sum=%+d player_delta=%+.1f → %.1f",
 				pl.Name, pl.RosterRGX, len(pl.Result.Games), pl.Result.TotalDelta, delta, float64(pl.RosterRGX)+delta)
+			if openDelta != 0 {
+				fmt.Fprintf(&b, " open_rgx_delta=%+.1f", openDelta)
+			}
+			b.WriteString("\n")
 			writeGameLines(&b, pl.Result.Games)
 		}
 	}

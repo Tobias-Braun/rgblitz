@@ -181,9 +181,9 @@ Captures only what one player's `/today` request fetches, through the real `Scra
 go run ./cmd/fixturecapture --league "59944,59549"
 ```
 
-Captures one Deutsche Roundnet Liga team's matchday per team ID — the `{id}` of its `/tournaments/schedule/team/{id}` page. Every roster player runs through the real `ScrapePlayerLeagueToday`, so the snapshot holds what production fetches for that team: its schedule page, the matchday group page of each Begegnung, and for today's Begegnungen the `/ajax/get-subgames/{id}` Partien and the opponents' schedule pages. `report.txt` lists each Begegnung with its date, each Partie with both pairs and sets, every roster, and per player the per-Partie formula intermediates, the pair-delta sum and the player's own change (half of each pair delta) next to their roster RGX.
+Captures one Deutsche Roundnet Liga team's matchday per team ID — the `{id}` of its `/tournaments/schedule/team/{id}` page. Every roster player runs through the real `ScrapePlayerLeagueToday`, so the snapshot holds what production fetches for that team: the rankings (shared by every team of the run — the player index a woman's Open Partie reads), its schedule page, the matchday group page of each Begegnung, and for today's Begegnungen the `/ajax/get-subgames/{id}` Partien and the opponents' schedule pages. `report.txt` lists each Begegnung with its date, each Partie with both pairs and sets, every roster, and per player the per-Partie formula intermediates, the pair-delta sum and the player's own change (half of each pair delta) next to their roster RGX.
 
-The roster RGX is the pre-matchday baseline only until playerzone recalculates. Captured again after that, the roster shows the new RGX — which makes a pre- and a post-recalculation capture of the same team the check of the league formula. A team costs about `1 + its Begegnungen + 2 × today's Begegnungen` requests (~20).
+The roster RGX is the pre-matchday baseline only until playerzone recalculates. Captured again after that, the roster shows the new RGX — which makes a pre- and a post-recalculation capture of the same team the check of the league formula. A team costs about `1 + its Begegnungen + 2 × today's Begegnungen` requests (~20), plus 2 ranking requests per run.
 
 #### What a snapshot holds
 
@@ -246,7 +246,7 @@ A full tournament costs roughly `1 + divisions + teams` requests — about 110 f
 
 `cmd/reindex` runs the exact same job the Saturday 03:00 CET cron trigger runs — `Scheduler.ScrapeNow()` — against the live `playerzone.roundnetgermany.de` ranking pages, and upserts the results into SQLite. Use it to check the ranking-page scraper still works after a change, or to manually refresh/repair the index without waiting for (or restarting) the weekly schedule.
 
-Both ranking tabs are scraped and merged: `/ranking/rg-index/1` (Open) is the base list, and `/ranking/rg-index/2` (Women) overrides the RGX of any player who also appears there. Women play Open tournaments too, but their tracked Open RGX and Women RGX can diverge — the persisted index always stores the Women RGX for those players, so the DB stays a stable reference value. If the Women tab fails to fetch, the reindex still completes with Open-only data (logged as a warning, not fatal).
+Both ranking tabs are scraped and merged: `/ranking/rg-index/1` (Open) is the base list, and `/ranking/rg-index/2` (Women) adds every player's Women RGX. Women play Open tournaments too, and their tracked Open RGX and Women RGX can diverge, so the index stores both apart (`open_rgx`, `women_rgx`); the displayed `rgx` is the Women RGX for those players. A league job prices a woman's Open Partie with her `open_rgx`. If the Women tab fails to fetch, the reindex still completes from the Open tab and keeps each player's Women RGX from the last scrape (logged as a warning, not fatal).
 
 ```sh
 cd backend
